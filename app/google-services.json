@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "155717326409",
+    "project_id": "educanet-a7faa",
+    "storage_bucket": "educanet-a7faa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:155717326409:android:e45d0419f5cba689829198",
+        "android_client_info": {
+          "package_name": "com.example.educanet"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3HxAdgzMSGAnJkkQZ8wQsdptb72SOsTU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
