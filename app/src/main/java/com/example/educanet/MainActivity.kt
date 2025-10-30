@@ -110,5 +110,24 @@ fun EducanetNav() {
         composable("settings") {
             SettingsScreen(onBack = { navController.popBackStack() })
         }
+        composable("createClass") {
+            CreateClassScreenAdmin(
+                onBack  = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
+            )
+        }
+        composable("createClassAdmin") {
+            CreateClassScreenAdmin(
+                onBack = { navController.popBackStack() },
+                onSaved = {
+                    navController.popBackStack() // vuelve al Home
+                    // opcional: mostrar snackbar o refresh
+                }
+            )
+        }
+
+
     }
+
+
 }

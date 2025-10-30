@@ -25,22 +25,31 @@ fun RegisterScreen(
     var pass by rememberSaveable { mutableStateOf("") }
     var pass2 by rememberSaveable { mutableStateOf("") }
 
-    // 👇 rol con dropdown (estudiante o profesor)
+    // ▼ Nuevo: 4 roles
+    val roleOptions = listOf("admin", "profesor", "estudiante", "apoderado")
     var role by rememberSaveable { mutableStateOf("estudiante") }
     var roleMenu by remember { mutableStateOf(false) }
+
+    // ▼ Si el rol es apoderado, pedimos el UID del estudiante a vincular
+    var linkedStudent by rememberSaveable { mutableStateOf("") }
 
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     fun createProfile(uid: String) {
-        val userDoc = mapOf(
+        val base = mutableMapOf(
             "uid" to uid,
             "name" to name.trim(),
             "email" to email.trim(),
-            "role" to role, //
+            "role" to role,
             "createdAt" to FieldValue.serverTimestamp()
         )
-        db.collection("users").document(uid).set(userDoc)
+
+        if (role == "apoderado") {
+            base["linkedStudent"] = linkedStudent.trim() // UID del alumno asociado
+        }
+
+        db.collection("users").document(uid).set(base)
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { e -> error = "No se pudo guardar el perfil: ${e.message}" }
             .addOnCompleteListener { loading = false }
@@ -49,14 +58,19 @@ fun RegisterScreen(
     fun doRegister() {
         error = null
         if (name.isBlank() || email.isBlank() || pass.length < 6 || pass != pass2) {
-            error = "Revisa nombre, email y contraseñas (mín. 6 y iguales)"
+            error = "Revisa nombre, email y contraseñas (mín. 6 y que coincidan)"
             return
         }
+        if (role == "apoderado" && linkedStudent.isBlank()) {
+            error = "Debes indicar el UID del estudiante vinculado (apoderado)."
+            return
+        }
+
         loading = true
         auth.createUserWithEmailAndPassword(email.trim(), pass)
             .addOnSuccessListener { res ->
                 val uid = res.user?.uid ?: return@addOnSuccessListener
-                createProfile(uid) //
+                createProfile(uid)
             }
             .addOnFailureListener { e ->
                 loading = false
@@ -65,7 +79,9 @@ fun RegisterScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
         verticalArrangement = Arrangement.Center
     ) {
         Text("Crear cuenta", style = MaterialTheme.typography.headlineMedium)
@@ -104,7 +120,13 @@ fun RegisterScreen(
             onExpandedChange = { roleMenu = !roleMenu }
         ) {
             OutlinedTextField(
-                value = if (role == "profesor") "Profesor" else "Estudiante",
+                value = when (role) {
+                    "admin" -> "Administrador"
+                    "profesor" -> "Profesor"
+                    "estudiante" -> "Estudiante"
+                    "apoderado" -> "Apoderado"
+                    else -> role
+                },
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("Rol") },
@@ -117,17 +139,46 @@ fun RegisterScreen(
                 expanded = roleMenu,
                 onDismissRequest = { roleMenu = false }
             ) {
-                DropdownMenuItem(
-                    text = { Text("Estudiante") },
-                    onClick = { role = "estudiante"; roleMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Profesor") },
-                    onClick = { role = "profesor"; roleMenu = false }
-                )
+                roleOptions.forEach { r ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                when (r) {
+                                    "admin" -> "Administrador"
+                                    "profesor" -> "Profesor"
+                                    "estudiante" -> "Estudiante"
+                                    "apoderado" -> "Apoderado"
+                                    else -> r
+                                }
+                            )
+                        },
+                        onClick = {
+                            role = r
+                            roleMenu = false
+                        }
+                    )
+                }
             }
         }
-        // ▲ Fin selector rol
+        // ▲ Fin selector de rol
+
+        // ▼ Campo adicional si es apoderado
+        if (role == "apoderado") {
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = linkedStudent,
+                onValueChange = { linkedStudent = it },
+                label = { Text("UID del estudiante vinculado") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Tip: crea primero la cuenta del estudiante para obtener su UID, " +
+                        "o edítalo luego en su documento de usuario.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
 
         if (error != null) {
             Spacer(Modifier.height(8.dp))

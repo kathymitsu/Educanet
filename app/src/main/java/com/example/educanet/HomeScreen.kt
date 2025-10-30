@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -16,7 +15,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 
@@ -44,74 +42,99 @@ fun HomeScreen(
     var loading by remember { mutableStateOf(true) }
     var classes by remember { mutableStateOf(listOf<Pair<String, ClassItem>>()) }
 
-    // Suscripción a notificaciones (tópico general)
+    // 🔔 Suscripción a notificaciones
     LaunchedEffect(Unit) {
         FirebaseMessaging.getInstance().subscribeToTopic("classes")
     }
 
-    // Cargar perfil (nombre + rol)
+    // 👤 Cargar perfil
     LaunchedEffect(uid) {
         if (uid.isBlank()) return@LaunchedEffect
         db.collection("users").document(uid).get()
             .addOnSuccessListener {
                 name = it.getString("name") ?: ""
                 role = it.getString("role")
-                // Si quieres notificaciones por profesor:
                 if (role == "profesor") {
                     FirebaseMessaging.getInstance().subscribeToTopic("teacher-$uid")
                 }
             }
     }
 
-    // Escuchar clases (profe: solo propias / alumno: todas)
+    // 📚 Cargar clases según el rol del usuario
     LaunchedEffect(role, uid) {
-        if (role == null) return@LaunchedEffect
+        if (role == null || uid.isBlank()) return@LaunchedEffect
         loading = true
-
         val base = db.collection("classes")
-        val query = if (role == "profesor") {
-            base.whereEqualTo("createdBy", uid)
-                .orderBy("createdAt", Query.Direction.DESCENDING) // requiere índice (ya lo creaste)
-        } else {
-            base.orderBy("createdAt", Query.Direction.DESCENDING)
-        }
 
-        query.addSnapshotListener { snap, _ ->
-            classes = snap?.documents?.map { d ->
-                d.id to ClassItem(
-                    title = d.getString("title") ?: "",
-                    description = d.getString("description") ?: "",
-                    videoLink = d.getString("videoLink") ?: "",
-                    createdBy = d.getString("createdBy") ?: "",
-                    createdAt = d.getTimestamp("createdAt")
-                )
-            } ?: emptyList()
-            loading = false
-        }
-    }
-
-    fun deleteClass(id: String) {
-        // elimina comentarios y luego la clase
-        val classRef = db.collection("classes").document(id)
-        classRef.collection("comments").get()
-            .addOnSuccessListener { comments ->
-                val batch = db.batch()
-                comments.documents.forEach { batch.delete(it.reference) }
-                batch.commit().addOnCompleteListener {
-                    classRef.delete()
-                        .addOnSuccessListener {
-                            scope.launch { snackbar.showSnackbar("Clase eliminada") }
-                        }
-                        .addOnFailureListener { e ->
-                            scope.launch { snackbar.showSnackbar("Error eliminando: ${e.message}") }
-                        }
+        when (role) {
+            "admin" -> {
+                // Admin ve todas las clases
+                base.addSnapshotListener { snap, err ->
+                    if (err != null) { loading = false; return@addSnapshotListener }
+                    val list = snap?.documents?.map { d ->
+                        d.id to ClassItem(
+                            title = d.getString("title") ?: "",
+                            description = d.getString("description") ?: "",
+                            videoLink = d.getString("videoLink") ?: "",
+                            professorId = d.getString("professorId") ?: "",
+                            assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                            createdBy = d.getString("createdBy") ?: "",
+                            createdAt = d.getTimestamp("createdAt"),
+                            isActive = d.getBoolean("isActive") ?: true
+                        )
+                    } ?: emptyList()
+                    classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
+                    loading = false
                 }
             }
-            .addOnFailureListener { e ->
-                scope.launch { snackbar.showSnackbar("Error eliminando comentarios: ${e.message}") }
+
+            "profesor" -> {
+                // Profesor ve solo sus clases asignadas
+                base.whereEqualTo("professorId", uid)
+                    .addSnapshotListener { snap, err ->
+                        if (err != null) { loading = false; return@addSnapshotListener }
+                        val list = snap?.documents?.map { d ->
+                            d.id to ClassItem(
+                                title = d.getString("title") ?: "",
+                                description = d.getString("description") ?: "",
+                                videoLink = d.getString("videoLink") ?: "",
+                                professorId = d.getString("professorId") ?: "",
+                                assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                                createdBy = d.getString("createdBy") ?: "",
+                                createdAt = d.getTimestamp("createdAt"),
+                                isActive = d.getBoolean("isActive") ?: true
+                            )
+                        } ?: emptyList()
+                        classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
+                        loading = false
+                    }
             }
+
+            else -> {
+                // Estudiante ve clases donde esté asignado
+                base.whereArrayContains("assignedStudents", uid)
+                    .addSnapshotListener { snap, err ->
+                        if (err != null) { loading = false; return@addSnapshotListener }
+                        val list = snap?.documents?.map { d ->
+                            d.id to ClassItem(
+                                title = d.getString("title") ?: "",
+                                description = d.getString("description") ?: "",
+                                videoLink = d.getString("videoLink") ?: "",
+                                professorId = d.getString("professorId") ?: "",
+                                assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                                createdBy = d.getString("createdBy") ?: "",
+                                createdAt = d.getTimestamp("createdAt"),
+                                isActive = d.getBoolean("isActive") ?: true
+                            )
+                        } ?: emptyList()
+                        classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
+                        loading = false
+                    }
+            }
+        }
     }
 
+    // 🧭 UI
     Scaffold(
         topBar = {
             TopAppBar(
@@ -127,7 +150,8 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            if (role == "profesor") {
+            // Solo admin puede crear clases
+            if (role == "admin") {
                 FloatingActionButton(onClick = onNewClass) {
                     Icon(Icons.Default.Add, contentDescription = "Nueva clase")
                 }
@@ -142,7 +166,6 @@ fun HomeScreen(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Encabezado
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = if (name.isBlank()) "Bienvenido/a" else "Hola, $name",
@@ -157,24 +180,19 @@ fun HomeScreen(
                 }
             }
 
-            // Accesos
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                ElevatedButton(
-                    onClick = onOpenResources,
-                    modifier = Modifier.weight(1f)
-                ) { Text("Recursos") }
-
-                ElevatedButton(
-                    onClick = onOpenProgress,
-                    modifier = Modifier.weight(1f)
-                ) { Text("Progreso") }
+                ElevatedButton(onClick = onOpenResources, modifier = Modifier.weight(1f)) {
+                    Text("Recursos")
+                }
+                ElevatedButton(onClick = onOpenProgress, modifier = Modifier.weight(1f)) {
+                    Text("Progreso")
+                }
             }
 
-            Divider()
-
+            HorizontalDivider()
             Text("Clases", style = MaterialTheme.typography.titleMedium)
 
             if (loading) {
@@ -182,7 +200,7 @@ fun HomeScreen(
                     CircularProgressIndicator()
                 }
             } else if (classes.isEmpty()) {
-                Text("No hay clases aún.")
+                Text("No hay clases para tu rol.")
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(classes.size) { i ->
@@ -192,29 +210,24 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .clickable { onOpenClass(id) }
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(12.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    if (c.description.isNotBlank()) {
-                                        Text(
-                                            c.description,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    }
+                            Column(Modifier.padding(12.dp)) {
+                                Text(
+                                    c.title.ifBlank { "Clase: $id" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (c.description.isNotBlank()) {
+                                    Text(
+                                        c.description,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
                                 }
-
-                                // Basurero si el profe es dueño
-                                if (role == "profesor" && c.createdBy == uid) {
-                                    IconButton(onClick = { deleteClass(id) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar")
-                                    }
+                                if (!c.isActive) {
+                                    Spacer(Modifier.height(4.dp))
+                                    AssistChip(onClick = {}, label = { Text("Inactiva") })
                                 }
                             }
                         }
