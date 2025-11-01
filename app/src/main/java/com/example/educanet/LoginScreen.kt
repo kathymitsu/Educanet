@@ -8,17 +8,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun LoginScreen(
     onGoRegister: () -> Unit,
-    onSuccess: () -> Unit
+    onSuccess: () -> Unit,
+    snackbarHostState: SnackbarHostState
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     var email by rememberSaveable { mutableStateOf("") }
     var pass by rememberSaveable { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    val scope = rememberCoroutineScope()
 
     fun doLogin() {
         error = null
@@ -27,10 +34,41 @@ fun LoginScreen(
             return
         }
         loading = true
-        auth.signInWithEmailAndPassword(email.trim(), pass)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { e -> error = e.message }
-            .addOnCompleteListener { loading = false }
+
+        // Modificaremos la lógica de éxito para que sea asíncrona
+        scope.launch {
+            try {
+                // 3. Inicia sesión y espera el resultado
+                val authResult = auth.signInWithEmailAndPassword(email.trim(), pass).await()
+                val user = authResult.user
+
+                // 4. Si el login es exitoso, busca el nombre en Firestore
+                var mensajeBienvenida = "¡Bienvenido/a de vuelta!" // Mensaje por defecto
+                if (user != null) {
+                    try {
+                        val docUsuario = Firebase.firestore.collection("users").document(user.uid).get().await()
+                        // Asumimos que tienes un campo llamado "name" en tu documento de usuario
+                        val nombreUsuario = docUsuario.getString("name")
+                        if (!nombreUsuario.isNullOrBlank()) {
+                            mensajeBienvenida = "¡Bienvenido/a de vuelta, $nombreUsuario!"
+                        }
+                    } catch (e: Exception) {
+
+                    }
+                }
+
+                snackbarHostState.showSnackbar(mensajeBienvenida)
+                kotlinx.coroutines.delay(4500)
+                onSuccess()
+
+            } catch (e: Exception) {
+
+                error = e.message
+
+            } finally {
+                loading = false
+            }
+        }
     }
 
     Column(

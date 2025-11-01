@@ -26,7 +26,7 @@ fun HomeScreen(
     onNewClass: () -> Unit,
     onOpenClass: (String) -> Unit,
     onOpenResources: () -> Unit,
-    onOpenProgress: () -> Unit,
+    onOpenProgress: (userId: String) -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val db = remember { FirebaseFirestore.getInstance() }
@@ -187,9 +187,16 @@ fun HomeScreen(
                 ElevatedButton(onClick = onOpenResources, modifier = Modifier.weight(1f)) {
                     Text("Recursos")
                 }
-                ElevatedButton(onClick = onOpenProgress, modifier = Modifier.weight(1f)) {
-                    Text("Progreso")
-                }
+                ElevatedButton(
+                onClick = {
+                    if (uid.isNotBlank()) {
+                        onOpenProgress(uid)
+                    }
+                },
+                modifier = Modifier.weight(1f)
+                ) {
+                Text("Progreso")
+            }
             }
 
             HorizontalDivider()
