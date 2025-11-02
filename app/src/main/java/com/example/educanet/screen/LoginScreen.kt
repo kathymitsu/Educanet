@@ -1,4 +1,4 @@
-package com.example.educanet
+package com.example.educanet.screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -58,7 +59,7 @@ fun LoginScreen(
                 }
 
                 snackbarHostState.showSnackbar(mensajeBienvenida)
-                kotlinx.coroutines.delay(4500)
+                delay(4500)
                 onSuccess()
 
             } catch (e: Exception) {

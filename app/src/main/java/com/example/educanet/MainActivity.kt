@@ -17,6 +17,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument           // <- importante: de androidx.navigation, no .compose
+import com.example.educanet.screen.ClassDetailScreen
+import com.example.educanet.screen.CreateClassScreen
+import com.example.educanet.screen.CreateClassScreenAdmin
+import com.example.educanet.screen.HomeScreen
+import com.example.educanet.screen.LoginScreen
+import com.example.educanet.screen.ProgressScreen
+import com.example.educanet.screen.RegisterScreen
+import com.example.educanet.screen.ResourcesScreen
+import com.example.educanet.screen.SettingsScreen
 import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
@@ -58,7 +67,7 @@ fun EducanetNav() {
                             popUpTo("login") { inclusive = true }
                         }
                     },
-                    onGoRegister = { navController.navigate("register")},
+                    onGoRegister = { navController.navigate("register") },
                     snackbarHostState = snackbarHostState
 
                 )
@@ -89,10 +98,11 @@ fun EducanetNav() {
                     onOpenClass = { id -> navController.navigate("classDetail/$id") },
                     onOpenResources = { navController.navigate("resources") },
                     onOpenProgress = { userId ->
-                        navController.navigate("progress/$userId") },
-                    onOpenSettings = {navController.navigate("Settings")}
+                        navController.navigate("progress/$userId")
+                    },
+                    onOpenSettings = { navController.navigate("Settings") }
 
-                    )
+                )
             }
 
             // ➕ Crear clase

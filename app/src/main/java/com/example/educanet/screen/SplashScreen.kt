@@ -1,4 +1,4 @@
-package com.example.educanet
+package com.example.educanet.screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.example.educanet.R
 import kotlinx.coroutines.delay
 
 @Composable

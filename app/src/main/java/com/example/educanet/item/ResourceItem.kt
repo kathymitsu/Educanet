@@ -1,4 +1,5 @@
-package com.example.educanet
+package com.example.educanet.item
+
 import com.google.firebase.Timestamp
 
 data class ResourceItem(

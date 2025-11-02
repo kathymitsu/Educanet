@@ -1,4 +1,4 @@
-package com.example.educanet
+package com.example.educanet.screen
 
 import android.content.Intent
 import android.net.Uri
@@ -9,6 +9,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.educanet.item.ResourceItem
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -59,7 +61,7 @@ fun ResourcesScreen(onBack: () -> Unit) {
             "type" to type.trim(),
             "url" to url.trim(),
             "createdBy" to (uid ?: ""),
-            "createdAt" to com.google.firebase.Timestamp.now()
+            "createdAt" to Timestamp.now()
         )
         db.collection("resources").add(data)
         showDialog = false; title = ""; type = "article"; url = ""

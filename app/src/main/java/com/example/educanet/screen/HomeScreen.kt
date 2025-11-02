@@ -1,4 +1,4 @@
-package com.example.educanet
+package com.example.educanet.screen
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,10 +13,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.educanet.item.ClassItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,7 +77,8 @@ fun HomeScreen(
                             description = d.getString("description") ?: "",
                             videoLink = d.getString("videoLink") ?: "",
                             professorId = d.getString("professorId") ?: "",
-                            assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                            assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
+                                ?: emptyList(),
                             createdBy = d.getString("createdBy") ?: "",
                             createdAt = d.getTimestamp("createdAt"),
                             isActive = d.getBoolean("isActive") ?: true
@@ -99,7 +100,8 @@ fun HomeScreen(
                                 description = d.getString("description") ?: "",
                                 videoLink = d.getString("videoLink") ?: "",
                                 professorId = d.getString("professorId") ?: "",
-                                assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                                assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
+                                    ?: emptyList(),
                                 createdBy = d.getString("createdBy") ?: "",
                                 createdAt = d.getTimestamp("createdAt"),
                                 isActive = d.getBoolean("isActive") ?: true
@@ -121,7 +123,8 @@ fun HomeScreen(
                                 description = d.getString("description") ?: "",
                                 videoLink = d.getString("videoLink") ?: "",
                                 professorId = d.getString("professorId") ?: "",
-                                assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                                assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
+                                    ?: emptyList(),
                                 createdBy = d.getString("createdBy") ?: "",
                                 createdAt = d.getTimestamp("createdAt"),
                                 isActive = d.getBoolean("isActive") ?: true

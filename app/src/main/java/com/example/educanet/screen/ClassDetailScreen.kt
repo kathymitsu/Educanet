@@ -1,4 +1,4 @@
-package com.example.educanet
+package com.example.educanet.screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +21,8 @@ import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import com.example.educanet.item.ClassItem
+import com.example.educanet.item.GradeItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
