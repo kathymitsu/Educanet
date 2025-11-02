@@ -8,6 +8,7 @@ data class ClassItem(
     val videoLink: String = "",
     val professorId: String = "",
     val assignedStudents: List<String> = emptyList(),
+    val imageUrl: String = "",
     val createdBy: String = "",
     val createdAt: Timestamp? = null,
     val isActive: Boolean = true

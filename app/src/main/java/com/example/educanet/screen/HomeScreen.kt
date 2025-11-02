@@ -17,7 +17,10 @@ import com.example.educanet.item.ClassItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
-
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import androidx.compose.ui.res.painterResource
+import com.example.educanet.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +80,7 @@ fun HomeScreen(
                             description = d.getString("description") ?: "",
                             videoLink = d.getString("videoLink") ?: "",
                             professorId = d.getString("professorId") ?: "",
+                            imageUrl = d.getString("imageUrl") ?: "",
                             assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
                                 ?: emptyList(),
                             createdBy = d.getString("createdBy") ?: "",
@@ -215,33 +219,48 @@ fun HomeScreen(
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(classes.size) { i ->
                         val (id, c) = classes[i]
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenClass(id) }
-                        ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(
-                                    c.title.ifBlank { "Clase: $id" },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (c.description.isNotBlank()) {
-                                    Text(
-                                        c.description,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                                if (!c.isActive) {
-                                    Spacer(Modifier.height(4.dp))
-                                    AssistChip(onClick = {}, label = { Text("Inactiva") })
-                                }
-                            }
-                        }
+                        ClassCard(classItem = c, onClick = { onOpenClass(id) })
                     }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun ClassCard(classItem: ClassItem, onClick: () -> Unit){
+    ElevatedCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            AsyncImage(
+                model = classItem.imageUrl,
+                contentDescription = "Portada de la clase ${classItem.title}",
+                placeholder = painterResource(id = R.drawable.ic_notification),
+                error = painterResource(id = R.drawable.ic_notification),
+                modifier = Modifier
+                    .fillMaxWidth().height(150.dp),
+                contentScale = ContentScale.Crop
+            )
+            Column(Modifier.padding(16.dp)){
+                Text(
+                    text = classItem.title.ifBlank { "Clase sin titulo" },
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (classItem.description.isNotBlank()){
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = classItem.description,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                if (!classItem.isActive){
+                    Spacer(Modifier.height(8.dp))
+                    AssistChip(onClick = {}, label = { Text("Inactiva") })
                 }
             }
         }

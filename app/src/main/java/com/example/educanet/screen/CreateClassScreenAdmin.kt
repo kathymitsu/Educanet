@@ -1,6 +1,19 @@
 // app/src/main/java/com/example/educanet/CreateClassScreenAdmin.kt
 package com.example.educanet.screen
 
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.google.firebase.storage.ktx.storage
+import java.util.UUID
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,10 +24,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.storage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +45,13 @@ fun CreateClassScreenAdmin(
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var videoLink by remember { mutableStateOf("") }
+
+    var imageUri by remember {mutableStateOf<Uri?>(null)}
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? -> imageUri = uri}
+    )
+
 
     // dropdown de profesores
     var profs by remember { mutableStateOf(listOf<Pair<String,String>>()) } // uid to name
@@ -80,25 +103,38 @@ fun CreateClassScreenAdmin(
             return
         }
         saving = true
-        val data = mapOf(
-            "title" to title.trim(),
-            "description" to description.trim(),
-            "videoLink" to videoLink.trim(),
-            "professorId" to selectedProfessor!!,
-            "assignedStudents" to selectedStudents.toList(),
-            "createdBy" to myUid,
-            "createdAt" to Timestamp.now(),
-            "isActive" to true
-        )
-        db.collection("classes").add(data)
-            .addOnSuccessListener {
-                scope.launch { snack.showSnackbar("Clase creada") }
+        scope.launch {
+            try {
+                var imageUrl = ""
+                if (imageUri != null) {
+                    val fileName = "class_images/${UUID.randomUUID()}.jpg"
+                    val imageRef = Firebase.storage.reference.child(fileName)
+                    imageRef.putFile(imageUri!!).await()
+                    imageUrl = imageRef.downloadUrl.await().toString()
+                }
+
+                val data = mapOf(
+                    "title" to title.trim(),
+                    "description" to description.trim(),
+                    "videoLink" to videoLink.trim(),
+                    "professorId" to selectedProfessor!!,
+                    "assignedStudents" to selectedStudents.toList(),
+                    "imageUrl" to imageUrl,
+                    "createdBy" to myUid,
+                    "createdAt" to Timestamp.now(),
+                    "isActive" to true
+                )
+
+                db.collection("classes").add(data).await()
+                snack.showSnackbar("Clase creada")
                 onSaved()
+
+            } catch (e: Exception) {
+                error = e.localizedMessage ?: "Error al guardar"
+            } finally {
+                saving = false
             }
-            .addOnFailureListener { e ->
-                error = e.message
-            }
-            .addOnCompleteListener { saving = false }
+        }
     }
 
     Scaffold(
@@ -113,7 +149,9 @@ fun CreateClassScreenAdmin(
         snackbarHost = { SnackbarHost(snack) }
     ) { pad ->
         if (loading) {
-            Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
+            Box(Modifier
+                .fillMaxSize()
+                .padding(pad), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
             return@Scaffold
@@ -122,10 +160,14 @@ fun CreateClassScreenAdmin(
         Column(
             modifier = Modifier
                 .padding(pad)
-                .padding(16.dp)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
         ) {
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = title, onValueChange = { title = it },
+                label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+            )
             OutlinedTextField(
                 value = title, onValueChange = { title = it },
                 label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth()
@@ -150,7 +192,9 @@ fun CreateClassScreenAdmin(
                     readOnly = true,
                     label = { Text("Profesor asignado") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = profMenu) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
                 )
                 ExposedDropdownMenu(expanded = profMenu, onDismissRequest = { profMenu = false }) {
                     profs.forEach { (uid, name) ->
@@ -162,14 +206,39 @@ fun CreateClassScreenAdmin(
                 }
             }
 
+            Spacer(Modifier.height(16.dp))
+            OutlinedButton(
+                onClick = {imagePickerLauncher.launch("image/*")},
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Seleccionar imagen")
+            }
+            imageUri?.let{
+                Spacer(Modifier.height(16.dp))
+                AsyncImage(
+                    model = it,
+                    contentDescription = "Imagen Seleccionada",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+
             Text("Estudiantes asignados", style = MaterialTheme.typography.titleMedium)
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f, fill = false)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
             ) {
                 items(students, key = { it.first }) { (uid, name) ->
                     val checked = uid in selectedStudents
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
