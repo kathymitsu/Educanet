@@ -11,16 +11,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.educanet.item.ClassItem
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.messaging.FirebaseMessaging
-import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
-import androidx.compose.ui.res.painterResource
-import com.example.educanet.R
+import kotlinx.coroutines.tasks.await
+
+data class ClassItemLite(
+    val title: String = "",
+    val description: String = "",
+    val professorId: String = "",
+    val assignedStudents: List<String> = emptyList(),
+    val isActive: Boolean = true,
+    val imageUrl: String = ""
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,142 +36,95 @@ fun HomeScreen(
     onNewClass: () -> Unit,
     onOpenClass: (String) -> Unit,
     onOpenResources: () -> Unit,
-    onOpenProgress: (userId: String) -> Unit,
+    onOpenProgress: (String) -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val db = remember { FirebaseFirestore.getInstance() }
-    val auth = remember { FirebaseAuth.getInstance() }
-    val uid = auth.currentUser?.uid.orEmpty()
-
-    val scope = rememberCoroutineScope()
-    val snackbar = remember { SnackbarHostState() }
+    val uid = remember { FirebaseAuth.getInstance().currentUser?.uid.orEmpty() }
 
     var name by remember { mutableStateOf("") }
     var role by remember { mutableStateOf<String?>(null) }
 
     var loading by remember { mutableStateOf(true) }
-    var classes by remember { mutableStateOf(listOf<Pair<String, ClassItem>>()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var classes by remember { mutableStateOf(listOf<Pair<String, ClassItemLite>>()) }
 
-    // 🔔 Suscripción a notificaciones
-    LaunchedEffect(Unit) {
-        FirebaseMessaging.getInstance().subscribeToTopic("classes")
-    }
-
-    // 👤 Cargar perfil
+    // PERFIL robusto (crea doc si no existe para evitar spinner infinito)
     LaunchedEffect(uid) {
         if (uid.isBlank()) return@LaunchedEffect
-        db.collection("users").document(uid).get()
-            .addOnSuccessListener {
-                name = it.getString("name") ?: ""
-                role = it.getString("role")
-                if (role == "profesor") {
-                    FirebaseMessaging.getInstance().subscribeToTopic("teacher-$uid")
-                }
+        try {
+            val ref = db.collection("users").document(uid)
+            val snap = ref.get().await()
+            if (!snap.exists()) {
+                val fallback = mapOf(
+                    "uid" to uid,
+                    "name" to (FirebaseAuth.getInstance().currentUser?.displayName
+                        ?: FirebaseAuth.getInstance().currentUser?.email ?: "Usuario"),
+                    "role" to "estudiante"
+                )
+                ref.set(fallback).await()
+                name = fallback["name"] as String
+                role = fallback["role"] as String
+            } else {
+                name = snap.getString("name") ?: "Usuario"
+                role = snap.getString("role") ?: "estudiante"
             }
-    }
-
-    // 📚 Cargar clases según el rol del usuario
-    LaunchedEffect(role, uid) {
-        if (role == null || uid.isBlank()) return@LaunchedEffect
-        loading = true
-        val base = db.collection("classes")
-
-        when (role) {
-            "admin" -> {
-                // Admin ve todas las clases
-                base.addSnapshotListener { snap, err ->
-                    if (err != null) { loading = false; return@addSnapshotListener }
-                    val list = snap?.documents?.map { d ->
-                        d.id to ClassItem(
-                            title = d.getString("title") ?: "",
-                            description = d.getString("description") ?: "",
-                            videoLink = d.getString("videoLink") ?: "",
-                            professorId = d.getString("professorId") ?: "",
-                            imageUrl = d.getString("imageUrl") ?: "",
-                            assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
-                                ?: emptyList(),
-                            createdBy = d.getString("createdBy") ?: "",
-                            createdAt = d.getTimestamp("createdAt"),
-                            isActive = d.getBoolean("isActive") ?: true
-                        )
-                    } ?: emptyList()
-                    classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
-                    loading = false
-                }
-            }
-
-            "profesor" -> {
-                // Profesor ve solo sus clases asignadas
-                base.whereEqualTo("professorId", uid)
-                    .addSnapshotListener { snap, err ->
-                        if (err != null) { loading = false; return@addSnapshotListener }
-                        val list = snap?.documents?.map { d ->
-                            d.id to ClassItem(
-                                title = d.getString("title") ?: "",
-                                description = d.getString("description") ?: "",
-                                videoLink = d.getString("videoLink") ?: "",
-                                professorId = d.getString("professorId") ?: "",
-                                assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
-                                    ?: emptyList(),
-                                createdBy = d.getString("createdBy") ?: "",
-                                createdAt = d.getTimestamp("createdAt"),
-                                isActive = d.getBoolean("isActive") ?: true
-                            )
-                        } ?: emptyList()
-                        classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
-                        loading = false
-                    }
-            }
-
-            else -> {
-                // Estudiante ve clases donde esté asignado
-                base.whereArrayContains("assignedStudents", uid)
-                    .addSnapshotListener { snap, err ->
-                        if (err != null) { loading = false; return@addSnapshotListener }
-                        val list = snap?.documents?.map { d ->
-                            d.id to ClassItem(
-                                title = d.getString("title") ?: "",
-                                description = d.getString("description") ?: "",
-                                videoLink = d.getString("videoLink") ?: "",
-                                professorId = d.getString("professorId") ?: "",
-                                assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
-                                    ?: emptyList(),
-                                createdBy = d.getString("createdBy") ?: "",
-                                createdAt = d.getTimestamp("createdAt"),
-                                isActive = d.getBoolean("isActive") ?: true
-                            )
-                        } ?: emptyList()
-                        classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
-                        loading = false
-                    }
-            }
+        } catch (e: Exception) {
+            name = FirebaseAuth.getInstance().currentUser?.displayName
+                ?: FirebaseAuth.getInstance().currentUser?.email ?: "Usuario"
+            role = "estudiante"
         }
     }
 
-    // 🧭 UI
+    // Carga de clases según rol — siempre termina loading aunque falle
+    LaunchedEffect(role, uid) {
+        if (role == null || uid.isBlank()) return@LaunchedEffect
+        loading = true
+        error = null
+
+        val base = db.collection("classes")
+        val q = when (role) {
+            "admin"    -> base
+            "profesor" -> base.whereEqualTo("professorId", uid)
+            else       -> base.whereArrayContains("assignedStudents", uid)
+        }
+        q.addSnapshotListener { snap, err ->
+            if (err != null) {
+                classes = emptyList()
+                loading = false
+                error = "No se pudieron cargar las clases (${err.code})."
+                return@addSnapshotListener
+            }
+            classes = snap?.documents?.map { d ->
+                d.id to ClassItemLite(
+                    title = d.getString("title") ?: "",
+                    description = d.getString("description") ?: "",
+                    professorId = d.getString("professorId") ?: "",
+                    assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
+                        ?: emptyList(),
+                    isActive = d.getBoolean("isActive") ?: true,
+                    imageUrl = d.getString("imageUrl") ?: ""
+                )
+            } ?: emptyList()
+            loading = false
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Educanet") },
                 actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Ajustes")
-                    }
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.Default.Logout, contentDescription = "Salir")
-                    }
+                    IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, null) }
+                    IconButton(onClick = onLogout) { Icon(Icons.Default.Logout, null) }
                 }
             )
         },
         floatingActionButton = {
-            // Solo admin puede crear clases
             if (role == "admin") {
-                FloatingActionButton(onClick = onNewClass) {
-                    Icon(Icons.Default.Add, contentDescription = "Nueva clase")
-                }
+                FloatingActionButton(onClick = onNewClass) { Icon(Icons.Default.Add, null) }
             }
-        },
-        snackbarHost = { SnackbarHost(snackbar) }
+        }
     ) { pad ->
         Column(
             modifier = Modifier
@@ -180,87 +140,57 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 )
                 if (role != null) {
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(role!!.replaceFirstChar { it.uppercase() }) }
-                    )
+                    AssistChip(onClick = {}, label = { Text(role!!.replaceFirstChar { it.uppercase() }) })
                 }
             }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                ElevatedButton(onClick = onOpenResources, modifier = Modifier.weight(1f)) {
-                    Text("Recursos")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ElevatedButton(onClick = onOpenResources, modifier = Modifier.weight(1f)) { Text("Recursos") }
+                ElevatedButton(onClick = { if (uid.isNotBlank()) onOpenProgress(uid) }, modifier = Modifier.weight(1f)) {
+                    Text("Progreso")
                 }
-                ElevatedButton(
-                onClick = {
-                    if (uid.isNotBlank()) {
-                        onOpenProgress(uid)
-                    }
-                },
-                modifier = Modifier.weight(1f)
-                ) {
-                Text("Progreso")
-            }
             }
 
             HorizontalDivider()
             Text("Clases", style = MaterialTheme.typography.titleMedium)
 
-            if (loading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else if (classes.isEmpty()) {
-                Text("No hay clases para tu rol.")
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            when {
+                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                classes.isEmpty() -> Text("No hay clases para tu rol.")
+                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(classes.size) { i ->
                         val (id, c) = classes[i]
-                        ClassCard(classItem = c, onClick = { onOpenClass(id) })
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth().clickable { onOpenClass(id) }
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                if (c.imageUrl.isNotBlank()) {
+                                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(ctx).data(c.imageUrl).crossfade(true).build(),
+                                        contentDescription = "Portada ${c.title}",
+                                        modifier = Modifier.fillMaxWidth().height(140.dp),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                                Text(
+                                    c.title.ifBlank { "Clase: $id" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (c.description.isNotBlank()) {
+                                    Text(c.description, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                                if (!c.isActive) {
+                                    Spacer(Modifier.height(4.dp))
+                                    AssistChip(onClick = {}, label = { Text("Inactiva") })
+                                }
+                            }
+                        }
                     }
-                }
-            }
-        }
-    }
-}
-@Composable
-private fun ClassCard(classItem: ClassItem, onClick: () -> Unit){
-    ElevatedCard(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column {
-            AsyncImage(
-                model = classItem.imageUrl,
-                contentDescription = "Portada de la clase ${classItem.title}",
-                placeholder = painterResource(id = R.drawable.ic_notification),
-                error = painterResource(id = R.drawable.ic_notification),
-                modifier = Modifier
-                    .fillMaxWidth().height(150.dp),
-                contentScale = ContentScale.Crop
-            )
-            Column(Modifier.padding(16.dp)){
-                Text(
-                    text = classItem.title.ifBlank { "Clase sin titulo" },
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (classItem.description.isNotBlank()){
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = classItem.description,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                if (!classItem.isActive){
-                    Spacer(Modifier.height(8.dp))
-                    AssistChip(onClick = {}, label = { Text("Inactiva") })
                 }
             }
         }

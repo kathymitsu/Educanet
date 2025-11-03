@@ -1,4 +1,4 @@
-package com.example.educanet.ui.theme
+package com.example.educanet.ui.ui
 
 import androidx.compose.ui.graphics.Color
 

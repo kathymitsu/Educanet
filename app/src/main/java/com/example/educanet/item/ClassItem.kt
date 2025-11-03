@@ -8,8 +8,9 @@ data class ClassItem(
     val videoLink: String = "",
     val professorId: String = "",
     val assignedStudents: List<String> = emptyList(),
-    val imageUrl: String = "",
     val createdBy: String = "",
     val createdAt: Timestamp? = null,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    // portada (gs://, ruta en Storage, o URL http)
+    val imageUrl: String = ""
 )
