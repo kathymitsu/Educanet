@@ -1,10 +1,12 @@
+// app/src/main/java/com/example/educanet/screen/CreateClassScreenAdmin.kt
 package com.example.educanet.screen
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,19 +43,19 @@ fun CreateClassScreenAdmin(
     var description by remember { mutableStateOf("") }
     var videoLink by remember { mutableStateOf("") }
 
-    // Portada (galería)
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri -> imageUri = uri }
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? -> imageUri = uri }
+    )
 
-    // Dropdown de profesores
-    var profs by remember { mutableStateOf(listOf<Pair<String, String>>()) } // uid -> nombre
+    // profesores
+    var profs by remember { mutableStateOf(listOf<Pair<String, String>>()) } // (uid to name)
     var profMenu by remember { mutableStateOf(false) }
     var selectedProfessor by remember { mutableStateOf<String?>(null) }
 
-    // Checkboxes de alumnos
-    var students by remember { mutableStateOf(listOf<Pair<String, String>>()) } // uid -> nombre
+    // alumnos
+    var students by remember { mutableStateOf(listOf<Pair<String, String>>()) } // (uid to name)
     var selectedStudents by remember { mutableStateOf(setOf<String>()) }
 
     var loading by remember { mutableStateOf(true) }
@@ -62,41 +64,47 @@ fun CreateClassScreenAdmin(
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // Cargar usuarios (profes y alumnos)
+    // Cargar usuarios
     LaunchedEffect(Unit) {
         loading = true
-        error = null
-        try {
-            val profQs = db.collection("users")
-                .whereEqualTo("role", "profesor")
-                .get()
-                .await()
-            profs = profQs.documents.map { d ->
-                val id = d.id
-                val name = d.getString("name") ?: d.getString("email") ?: id
-                id to name
-            }.sortedBy { it.second.lowercase() }
-            if (selectedProfessor == null && profs.isNotEmpty()) {
-                selectedProfessor = profs.first().first
+        db.collection("users").whereEqualTo("role", "profesor").get()
+            .addOnSuccessListener { qs ->
+                profs = qs.documents.map {
+                    val id = it.id
+                    val name = it.getString("name") ?: it.getString("email") ?: id
+                    id to name
+                }.sortedBy { it.second.lowercase() }
             }
-        } catch (e: Exception) {
-            error = "Error cargando profesores: ${e.message}"
-        }
+            .addOnFailureListener { e -> error = e.message }
 
-        try {
-            val stuQs = db.collection("users")
-                .whereEqualTo("role", "estudiante")
-                .get()
-                .await()
-            students = stuQs.documents.map { d ->
-                val id = d.id
-                val name = d.getString("name") ?: d.getString("email") ?: id
-                id to name
-            }.sortedBy { it.second.lowercase() }
-        } catch (e: Exception) {
-            error = (error?.let { "$it\n" } ?: "") + "Error cargando alumnos: ${e.message}"
-        }
-        loading = false
+        db.collection("users").whereEqualTo("role", "estudiante").get()
+            .addOnSuccessListener { qs ->
+                students = qs.documents.map {
+                    val id = it.id
+                    val name = it.getString("name") ?: it.getString("email") ?: id
+                    id to name
+                }.sortedBy { it.second.lowercase() }
+                loading = false
+            }
+            .addOnFailureListener { e ->
+                error = e.message
+                loading = false
+            }
+    }
+
+    suspend fun uploadCoverAndGetUrl(localUri: Uri?): String {
+        if (localUri == null) return ""
+        val fileName = "class_images/${UUID.randomUUID()}.jpg"
+        val ref = Firebase.storage.reference.child(fileName)
+
+        // Añade contentType para que el visor lo sirva bien (no es obligatorio, pero ayuda)
+        val metadata = com.google.firebase.storage.StorageMetadata.Builder()
+            .setContentType("image/jpeg")
+            .build()
+
+        // Subir y obtener URL de descarga (la parte que suele fallar si no se hace así)
+        ref.putFile(localUri, metadata).await()
+        return ref.downloadUrl.await().toString()
     }
 
     fun save() {
@@ -105,16 +113,11 @@ fun CreateClassScreenAdmin(
             error = "Título, profesor y al menos un estudiante son obligatorios."
             return
         }
+
         saving = true
         scope.launch {
             try {
-                var imageUrl = ""
-                imageUri?.let { local ->
-                    val fileName = "class_images/${UUID.randomUUID()}.jpg"
-                    val imageRef = Firebase.storage.reference.child(fileName)
-                    imageRef.putFile(local).await()
-                    imageUrl = imageRef.downloadUrl.await().toString()
-                }
+                val imageUrl = uploadCoverAndGetUrl(imageUri) // "" si no hay imagen
 
                 val data = mapOf(
                     "title" to title.trim(),
@@ -122,7 +125,7 @@ fun CreateClassScreenAdmin(
                     "videoLink" to videoLink.trim(),
                     "professorId" to selectedProfessor!!,
                     "assignedStudents" to selectedStudents.toList(),
-                    "imageUrl" to imageUrl,
+                    "imageUrl" to imageUrl,               // <<--- URL COMPLETA https
                     "createdBy" to myUid,
                     "createdAt" to Timestamp.now(),
                     "isActive" to true
@@ -133,6 +136,7 @@ fun CreateClassScreenAdmin(
                 onSaved()
             } catch (e: Exception) {
                 error = e.localizedMessage ?: "Error al guardar"
+                snack.showSnackbar("No se pudo crear: ${error}")
             } finally {
                 saving = false
             }
@@ -144,7 +148,7 @@ fun CreateClassScreenAdmin(
             TopAppBar(
                 title = { Text("Nueva clase (Admin)") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null) }
+                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
                 }
             )
         },
@@ -152,13 +156,9 @@ fun CreateClassScreenAdmin(
     ) { pad ->
         if (loading) {
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(pad),
+                Modifier.fillMaxSize().padding(pad),
                 contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
+            ) { CircularProgressIndicator() }
             return@Scaffold
         }
 
@@ -166,31 +166,20 @@ fun CreateClassScreenAdmin(
             modifier = Modifier
                 .padding(pad)
                 .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState()),
         ) {
             Spacer(Modifier.height(16.dp))
-
             OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Título") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                value = title, onValueChange = { title = it },
+                label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth()
             )
-
             OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
-                label = { Text("Descripción") },
-                modifier = Modifier.fillMaxWidth()
+                value = description, onValueChange = { description = it },
+                label = { Text("Descripción") }, modifier = Modifier.fillMaxWidth()
             )
-
             OutlinedTextField(
-                value = videoLink,
-                onValueChange = { videoLink = it },
-                label = { Text("Link video (opcional)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                value = videoLink, onValueChange = { videoLink = it },
+                label = { Text("Link video (opcional)") }, singleLine = true, modifier = Modifier.fillMaxWidth()
             )
 
             // Profesor asignado
@@ -199,47 +188,34 @@ fun CreateClassScreenAdmin(
                 onExpandedChange = { profMenu = !profMenu }
             ) {
                 OutlinedTextField(
-                    value = selectedProfessor?.let { uid ->
-                        profs.find { it.first == uid }?.second
-                    } ?: "",
+                    value = selectedProfessor?.let { uid -> profs.find { it.first == uid }?.second } ?: "",
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Profesor asignado") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = profMenu) },
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth()
+                    modifier = Modifier.menuAnchor().fillMaxWidth()
                 )
-                ExposedDropdownMenu(
-                    expanded = profMenu,
-                    onDismissRequest = { profMenu = false }
-                ) {
+                ExposedDropdownMenu(expanded = profMenu, onDismissRequest = { profMenu = false }) {
                     profs.forEach { (uid, name) ->
                         DropdownMenuItem(
                             text = { Text(name) },
-                            onClick = {
-                                selectedProfessor = uid
-                                profMenu = false
-                            }
+                            onClick = { selectedProfessor = uid; profMenu = false }
                         )
                     }
                 }
             }
 
             Spacer(Modifier.height(16.dp))
-
             OutlinedButton(
                 onClick = { imagePickerLauncher.launch("image/*") },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Seleccionar imagen")
-            }
+            ) { Text("Seleccionar imagen") }
 
             imageUri?.let {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
                 AsyncImage(
                     model = it,
-                    contentDescription = "Imagen Seleccionada",
+                    contentDescription = "Portada seleccionada",
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(180.dp)
@@ -249,29 +225,26 @@ fun CreateClassScreenAdmin(
             }
 
             Spacer(Modifier.height(16.dp))
-
             Text("Estudiantes asignados", style = MaterialTheme.typography.titleMedium)
-
-            // Lista simple (sin scroll anidado)
-            Column(Modifier.fillMaxWidth()) {
-                students.forEach { (uid, name) ->
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                items(students, key = { it.first }) { (uid, name) ->
                     val checked = uid in selectedStudents
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(name, modifier = Modifier.weight(1f))
                         Checkbox(
                             checked = checked,
-                            onCheckedChange = { isChecked ->
-                                selectedStudents = if (isChecked) {
-                                    selectedStudents + uid
-                                } else {
-                                    selectedStudents - uid
-                                }
+                            onCheckedChange = {
+                                selectedStudents =
+                                    if (it == true) selectedStudents + uid else selectedStudents - uid
                             }
                         )
                     }
@@ -279,19 +252,16 @@ fun CreateClassScreenAdmin(
                 }
             }
 
-            error?.let {
+            if (error != null) {
+                Text(error!!, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(8.dp))
-                Text(it, color = MaterialTheme.colorScheme.error)
             }
 
-            Spacer(Modifier.height(8.dp))
             Button(
                 onClick = { save() },
                 enabled = !saving,
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (saving) "Guardando..." else "Crear clase")
-            }
+            ) { Text(if (saving) "Guardando..." else "Crear clase") }
 
             Spacer(Modifier.height(24.dp))
         }
