@@ -37,9 +37,32 @@ fun RegisterScreen(
     var loading by remember { mutableStateOf(false) }
 
     fun validate(): Boolean {
-        nameErr = AuthValidators.validateName(name)?.message
-        emailErr = AuthValidators.validateEmail(email)?.message
-        passErr = AuthValidators.validatePassword(pass)?.message
+        // Validate name: Check if it is empty first for a clearer message.
+        if (name.isBlank()) {
+            nameErr = "El nombre es obligatorio."
+        } else {
+            nameErr = AuthValidators.validateName(name)?.message
+        }
+
+        // Validate email: Check for emptiness, then format, then the specific domain.
+        if (email.isBlank()) {
+            emailErr = "El correo es obligatorio."
+        } else {
+            emailErr = AuthValidators.validateEmail(email)?.message
+            // If the format is valid, check for the required domain.
+            if (emailErr == null && !email.endsWith("@educanet.cl", ignoreCase = true)) {
+                emailErr = "El correo debe pertenecer al dominio @educanet.cl."
+            }
+        }
+
+        // Validate password: Check for emptiness first.
+        if (pass.isBlank()) {
+            passErr = "La contraseña es obligatoria."
+        } else {
+            passErr = AuthValidators.validatePassword(pass)?.message
+        }
+
+        // Return true only if all error messages are null.
         return listOf(nameErr, emailErr, passErr).all { it == null }
     }
 
@@ -115,3 +138,4 @@ fun RegisterScreen(
         }
     }
 }
+
