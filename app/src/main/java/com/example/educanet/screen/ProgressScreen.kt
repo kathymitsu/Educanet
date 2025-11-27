@@ -114,7 +114,7 @@ private fun ProgressCard(item: ProgressItem, reinicioFecha: SimpleDateFormat) {
                 )
                 Spacer(Modifier.height(4.dp))
 
-                // --> 12. Muestra la fecha formateada si existe.
+                //Muestra la fecha formateada si existe.
                 val formattedDate = item.updatedAt?.toDate()?.let {
                     reinicioFecha.format(it)
                 } ?: "Fecha desconocida"
