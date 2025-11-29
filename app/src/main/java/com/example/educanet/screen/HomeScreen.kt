@@ -16,14 +16,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.example.educanet.data.UserPrefs
 import com.example.educanet.item.ClassItem
 import com.example.educanet.ui.ui.StorageImage
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -50,7 +49,6 @@ fun HomeScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // Perfil desde DataStore
     val profile by UserPrefs.profileFlow(ctx).collectAsState(initial = UserPrefs.Profile())
     var name by remember { mutableStateOf(profile.name) }
     var role by remember { mutableStateOf(profile.role.ifBlank { null }) }
@@ -59,14 +57,18 @@ fun HomeScreen(
     var classes by remember { mutableStateOf(listOf<Pair<String, ClassItem>>()) }
     var errorText by remember { mutableStateOf<String?>(null) }
 
-    // Suscripción básica a topic de clases
+    // Suscripción a topic
     LaunchedEffect(Unit) {
         runCatching { FirebaseMessaging.getInstance().subscribeToTopic("classes").await() }
     }
 
-    // Si no hay nombre/rol en DataStore → los trae de Firestore y los guarda
+    // Cargar nombre / rol si no están en DataStore
     LaunchedEffect(uid) {
-        if (uid.isBlank()) return@LaunchedEffect
+        if (uid.isBlank()) {
+            name = ""
+            role = null
+            return@LaunchedEffect
+        }
         if (profile.role.isBlank() || profile.name.isBlank()) {
             runCatching {
                 val snap = db.collection("users").document(uid).get().await()
@@ -82,9 +84,19 @@ fun HomeScreen(
         }
     }
 
-    // Cargar clases según rol
+    // Cargar clases según rol (con fix para uid vacío)
     LaunchedEffect(role, uid) {
-        if (role == null || uid.isBlank()) return@LaunchedEffect
+        if (uid.isBlank()) {
+            loading = false
+            classes = emptyList()
+            errorText = null
+            return@LaunchedEffect
+        }
+        if (role == null) {
+            loading = false
+            return@LaunchedEffect
+        }
+
         loading = true
         errorText = null
 
@@ -104,7 +116,6 @@ fun HomeScreen(
                 }
 
                 val list = snap?.documents?.map { d ->
-                    // Usamos el data class ClassItem global
                     val ci = d.toObject(ClassItem::class.java) ?: ClassItem()
                     d.id to ci.copy(id = d.id)
                 } ?: emptyList()
@@ -135,8 +146,17 @@ fun HomeScreen(
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "Ajustes")
                     }
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.Filled.Logout, contentDescription = "Salir")
+                    IconButton(
+                        onClick = {
+                            // 1) Cerrar sesión Firebase
+                            FirebaseAuth.getInstance().signOut()
+                            // 2) Limpiar perfil local
+                            scope.launch { UserPrefs.clearProfile(ctx) }
+                            // 3) Navegar a login (lo maneja el NavHost)
+                            onLogout()
+                        }
+                    ) {
+                        Icon(Icons.Filled.Logout, contentDescription = "Cerrar sesión")
                     }
                 }
             )
@@ -227,7 +247,6 @@ fun HomeScreen(
                                             .clickable { onOpenClass(id) }
                                     ) {
                                         Column(Modifier.padding(12.dp)) {
-                                            // Portada si viene imageUrl
                                             if (c.imageUrl.isNotBlank()) {
                                                 StorageImage(
                                                     url = c.imageUrl,

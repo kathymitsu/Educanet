@@ -5,9 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -19,9 +18,10 @@ import androidx.navigation.navArgument
 import com.example.educanet.screen.CartScreen
 import com.example.educanet.screen.ClassDetailScreen
 import com.example.educanet.screen.HomeScreen
+import com.example.educanet.screen.LoginScreen
 import com.example.educanet.screen.ProgressScreen
 import com.example.educanet.screen.SettingsScreen
-// importa también tus otras pantallas si las necesitas:
+// importa CreateClassScreen si la tienes
 // import com.example.educanet.screen.CreateClassScreen
 
 class MainActivity : ComponentActivity() {
@@ -39,8 +39,7 @@ fun EducanetApp() {
 
     MaterialTheme {
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            topBar = { /* usamos TopAppBar dentro de cada pantalla, así que nada aquí */ }
+            modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
             EducanetNav(
                 navController = navController,
@@ -57,17 +56,27 @@ fun EducanetNav(
 ) {
     NavHost(
         navController = navController,
-        startDestination = "home",
-        modifier = Modifier
-            .fillMaxSize()
+        startDestination = "login",
+        modifier = Modifier.fillMaxSize()
     ) {
+        // LOGIN
+        composable(route = "login") {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate("home") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                }
+            )
+        }
+
         // HOME
         composable(route = "home") {
             HomeScreen(
                 onLogout = {
-                    // aquí puedes hacer signOut de Firebase si quieres
-                    // FirebaseAuth.getInstance().signOut()
-                    // y quizá navegar a una pantalla de login
+                    navController.navigate("login") {
+                        popUpTo("home") { inclusive = true }
+                    }
                 },
                 onNewClass = {
                     navController.navigate("createClass")
@@ -76,7 +85,7 @@ fun EducanetNav(
                     navController.navigate("classDetail/$classId")
                 },
                 onOpenResources = {
-                    // si tienes otra pantalla de recursos, navega aquí
+                    // si tienes pantalla de recursos, navega aquí
                     // navController.navigate("resources")
                 },
                 onOpenProgress = { studentId ->
@@ -85,18 +94,16 @@ fun EducanetNav(
                 onOpenSettings = {
                     navController.navigate("settings")
                 },
-                onOpenCart = {                    // 👈 ESTE ES EL QUE FALTABA
+                onOpenCart = {
                     navController.navigate("cart")
                 }
             )
         }
 
-        // DETALLE DE CLASE + NOTAS + RESEÑAS
+        // DETALLE DE CLASE
         composable(
             route = "classDetail/{classId}",
-            arguments = listOf(
-                navArgument("classId") { type = NavType.StringType }
-            )
+            arguments = listOf(navArgument("classId") { type = NavType.StringType })
         ) { backStackEntry ->
             val classId = backStackEntry.arguments?.getString("classId") ?: ""
             ClassDetailScreen(
@@ -105,12 +112,10 @@ fun EducanetNav(
             )
         }
 
-        // PROGRESO (alumno / apoderado)
+        // PROGRESO
         composable(
             route = "progress/{studentId}",
-            arguments = listOf(
-                navArgument("studentId") { type = NavType.StringType }
-            )
+            arguments = listOf(navArgument("studentId") { type = NavType.StringType })
         ) { backStackEntry ->
             val studentId = backStackEntry.arguments?.getString("studentId")
             ProgressScreen(
@@ -119,7 +124,7 @@ fun EducanetNav(
             )
         }
 
-        // AJUSTES (avatar, cámara + galería)
+        // AJUSTES
         composable(route = "settings") {
             SettingsScreen(
                 onBack = { navController.popBackStack() }
@@ -130,16 +135,13 @@ fun EducanetNav(
         composable(route = "cart") {
             CartScreen(
                 onBack = { navController.popBackStack() },
-                onCheckoutSuccess = {
-                    // después de confirmar inscripción, volvemos atrás
-                    navController.popBackStack()
-                }
+                onCheckoutSuccess = { navController.popBackStack() }
             )
         }
 
-        // CREAR CLASE (si tienes esta pantalla)
+        // CREAR CLASE (si la tienes)
         composable(route = "createClass") {
-            // Descomenta y ajusta si tienes CreateClassScreen
+            // Descomenta si tienes CreateClassScreen
             /*
             CreateClassScreen(
                 onCancel = { navController.popBackStack() },
