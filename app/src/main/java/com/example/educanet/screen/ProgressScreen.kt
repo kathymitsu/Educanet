@@ -8,8 +8,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -23,22 +21,36 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProgressScreen(onBack: () -> Unit, studentId: String?) {
+fun ProgressScreen(
+    onBack: () -> Unit,
+    studentId: String? // si viene null, se usa el usuario logeado
+) {
     val auth = remember { FirebaseAuth.getInstance() }
     val db = remember { FirebaseFirestore.getInstance() }
-    val uid = auth.currentUser?.uid ?: return
+
+    val currentUid = auth.currentUser?.uid
+    val effectiveUserId = studentId ?: currentUid
 
     var items by remember { mutableStateOf(listOf<ProgressItem>()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    val reinicioFecha = remember{ SimpleDateFormat("dd 'de' MMMM 'del' yyyy", Locale("es", "CL")) }
-    // escucha progreso
-    LaunchedEffect(uid) {
+
+    val dateFormat = remember {
+        SimpleDateFormat("dd 'de' MMMM 'del' yyyy", Locale("es", "CL"))
+    }
+
+    LaunchedEffect(effectiveUserId) {
+        if (effectiveUserId == null) {
+            error = "No se encontró el usuario para cargar el progreso."
+            loading = false
+            return@LaunchedEffect
+        }
+
         db.collection("progress")
-            .whereEqualTo("userId", uid)
+            .whereEqualTo("userId", effectiveUserId)
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, e ->
-                if (e != null){
+                if (e != null) {
                     error = e.message
                     loading = false
                     return@addSnapshotListener
@@ -51,38 +63,59 @@ fun ProgressScreen(onBack: () -> Unit, studentId: String?) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Mi progreso") },
+                title = {
+                    Text(
+                        if (studentId == null) "Mi progreso"
+                        else "Progreso del alumno"
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 }
-
             )
         }
     ) { pad ->
-        Column(Modifier
-            .padding(pad)
-            .padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(pad)
+                .padding(16.dp)
+                .fillMaxSize()
+        ) {
             when {
                 loading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         CircularProgressIndicator()
                     }
                 }
-                error != null -> Text("Error: $error", color = MaterialTheme.colorScheme.error)
+
+                error != null -> {
+                    Text(
+                        "Error: $error",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
                 items.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center){
-                        Text("No hay progreso para mostrar")
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No hay progreso para mostrar.")
                     }
                 }
-                    else -> {
+
+                else -> {
                     LazyColumn(
-                            contentPadding = PaddingValues(vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        contentPadding = PaddingValues(vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         items(items) { item ->
-                            ProgressCard(item = item, reinicioFecha = reinicioFecha)
+                            ProgressCard(item = item, dateFormat = dateFormat)
                         }
                     }
                 }
@@ -90,8 +123,12 @@ fun ProgressScreen(onBack: () -> Unit, studentId: String?) {
         }
     }
 }
+
 @Composable
-private fun ProgressCard(item: ProgressItem, reinicioFecha: SimpleDateFormat) {
+private fun ProgressCard(
+    item: ProgressItem,
+    dateFormat: SimpleDateFormat
+) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -100,26 +137,43 @@ private fun ProgressCard(item: ProgressItem, reinicioFecha: SimpleDateFormat) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = "Completado",
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = "Estado",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(40.dp)
             )
+
             Spacer(Modifier.width(16.dp))
+
             Column {
                 Text(
                     text = item.classTitle.ifBlank { "Clase sin título" },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
+
                 Spacer(Modifier.height(4.dp))
 
-                //Muestra la fecha formateada si existe.
+                // Nota si existe (puede ser Int o Double según tu data class)
+                if (item.score != null) {
+                    Text(
+                        text = "Nota: ${item.score}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(2.dp))
+                }
+
                 val formattedDate = item.updatedAt?.toDate()?.let {
-                    reinicioFecha.format(it)
+                    dateFormat.format(it)
                 } ?: "Fecha desconocida"
+
+                val statusPretty = item.status.replaceFirstChar {
+                    if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+                }
+
                 Text(
-                    text = "${item.status.replaceFirstChar { it.uppercase() }} • $formattedDate",
+                    text = "$statusPretty • $formattedDate",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -127,144 +181,3 @@ private fun ProgressCard(item: ProgressItem, reinicioFecha: SimpleDateFormat) {
         }
     }
 }
-
-
-
-//package com.example.educanet.screen
-//
-//import androidx.compose.foundation.layout.*
-//import androidx.compose.foundation.lazy.LazyColumn
-//import androidx.compose.foundation.lazy.items
-//import androidx.compose.material.icons.Icons
-//import androidx.compose.material.icons.filled.ArrowBack
-//import androidx.compose.material.icons.filled.CheckCircle
-//import androidx.compose.material3.*
-//import androidx.compose.runtime.*
-//import androidx.compose.ui.Alignment
-//import androidx.compose.ui.Modifier
-//import androidx.compose.ui.text.font.FontWeight
-//import androidx.compose.ui.unit.dp
-//import com.example.educanet.item.ProgressItem
-//import com.google.firebase.auth.FirebaseAuth
-//import com.google.firebase.firestore.FirebaseFirestore
-//import com.google.firebase.firestore.Query
-//import java.text.SimpleDateFormat
-//import java.util.Locale
-//
-//@OptIn(ExperimentalMaterial3Api::class)
-//@Composable
-//fun ProgressScreen(onBack: () -> Unit, studentId: String?) {
-//    val auth = remember { FirebaseAuth.getInstance() }
-//    val db = remember { FirebaseFirestore.getInstance() }
-
-//    val targetUserId = studentId ?: auth.currentUser?.uid
-//
-//    var items by remember { mutableStateOf(listOf<ProgressItem>()) }
-//    var loading by remember { mutableStateOf(true) }
-//    var error by remember { mutableStateOf<String?>(null) }
-//    val reinicioFecha = remember { SimpleDateFormat("dd 'de' MMMM 'del' yyyy", Locale("es", "CL")) }
-
-//    LaunchedEffect(targetUserId) {
-//        if (targetUserId == null) {
-//            error = "No se pudo identificar al usuario."
-//            loading = false
-//            return@LaunchedEffect
-//        }
-//
-//        db.collection("progress")
-//            .whereEqualTo("userId", targetUserId) // Se usa el ID correcto
-//            .orderBy("updatedAt", Query.Direction.DESCENDING)
-//            .addSnapshotListener { snap, e ->
-//                if (e != null) {
-//                    error = "Error al cargar el progreso: ${e.message}"
-//                    loading = false
-//                    return@addSnapshotListener
-//                }
-//                items = snap?.toObjects(ProgressItem::class.java) ?: emptyList()
-//                loading = false
-//            }
-//    }
-//
-//    Scaffold(
-//        topBar = {
-//            CenterAlignedTopAppBar(
-//                title = { Text("Mi progreso") },
-//                navigationIcon = {
-//                    IconButton(onClick = onBack) {
-//                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
-//                    }
-//                }
-//            )
-//        }
-//    ) { pad ->
-//        Column(
-//            Modifier
-//                .padding(pad)
-//                .padding(16.dp)) {
-//            when {
-//                loading -> {
-//                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-//                        CircularProgressIndicator()
-//                    }
-//                }
-//                error != null -> {
-//                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-//                        Text("Error: $error", color = MaterialTheme.colorScheme.error)
-//                    }
-//                }
-//                items.isEmpty() -> {
-//                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center){
-//                        Text("No hay progreso para mostrar")
-//                    }
-//                }
-//                else -> {
-//                    LazyColumn(
-//                        contentPadding = PaddingValues(vertical = 16.dp),
-//                        verticalArrangement = Arrangement.spacedBy(12.dp)
-//                    ) {
-//                        items(items) { item ->
-//                            ProgressCard(item = item, reinicioFecha = reinicioFecha)
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
-//}
-//
-//@Composable
-//private fun ProgressCard(item: ProgressItem, reinicioFecha: SimpleDateFormat) {
-//    ElevatedCard(
-//        modifier = Modifier.fillMaxWidth()
-//    ) {
-//        Row(
-//            modifier = Modifier.padding(16.dp),
-//            verticalAlignment = Alignment.CenterVertically
-//        ) {
-//            Icon(
-//                imageVector = Icons.Default.CheckCircle,
-//                contentDescription = "Completado",
-//                tint = MaterialTheme.colorScheme.primary,
-//                modifier = Modifier.size(40.dp)
-//            )
-//            Spacer(Modifier.width(16.dp))
-//            Column {
-//                Text(
-//                    text = item.classTitle.ifBlank { "Clase sin título" },
-//                    style = MaterialTheme.typography.titleMedium,
-//                    fontWeight = FontWeight.Bold
-//                )
-//                Spacer(Modifier.height(4.dp))
-//
-//                val formattedDate = item.updatedAt?.toDate()?.let {
-//                    reinicioFecha.format(it)
-//                } ?: "Fecha desconocida"
-//                Text(
-//                    text = "${item.status.replaceFirstChar { it.uppercase() }} • $formattedDate",
-//                    style = MaterialTheme.typography.bodyMedium,
-//                    color = MaterialTheme.colorScheme.onSurfaceVariant
-//                )
-//            }
-//        }
-//    }
-//}

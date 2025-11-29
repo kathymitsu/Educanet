@@ -1,7 +1,9 @@
 package com.example.educanet.screen
 
-import com.example.educanet.ui.ui.StorageImage   // <- FIX import
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,38 +11,25 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import com.example.educanet.data.UserPrefs
+import com.example.educanet.item.ClassItem
+import com.example.educanet.ui.ui.StorageImage
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.launch
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import com.example.educanet.data.UserPrefs
-import com.google.firebase.Timestamp
-
-// Ajusta a tu data class real
-data class ClassItem(
-    val title: String = "",
-    val description: String = "",
-    val videoLink: String = "",
-    val professorId: String = "",
-    val assignedStudents: List<String> = emptyList(),
-    val createdBy: String = "",
-    val createdAt: Timestamp? = null,
-    val isActive: Boolean = true,
-    val imageUrl: String = "" // portada
-)
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,7 +39,8 @@ fun HomeScreen(
     onOpenClass: (String) -> Unit,
     onOpenResources: () -> Unit,
     onOpenProgress: (String) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenCart: () -> Unit
 ) {
     val ctx = LocalContext.current
     val db = remember { FirebaseFirestore.getInstance() }
@@ -69,12 +59,12 @@ fun HomeScreen(
     var classes by remember { mutableStateOf(listOf<Pair<String, ClassItem>>()) }
     var errorText by remember { mutableStateOf<String?>(null) }
 
-    // 🔔 Suscripción básica
+    // Suscripción básica a topic de clases
     LaunchedEffect(Unit) {
         runCatching { FirebaseMessaging.getInstance().subscribeToTopic("classes").await() }
     }
 
-    // 👤 Si no hay rol/nombre en DataStore, los trae de Firestore y los guarda local
+    // Si no hay nombre/rol en DataStore → los trae de Firestore y los guarda
     LaunchedEffect(uid) {
         if (uid.isBlank()) return@LaunchedEffect
         if (profile.role.isBlank() || profile.name.isBlank()) {
@@ -92,7 +82,7 @@ fun HomeScreen(
         }
     }
 
-    // 📚 Cargar clases según rol (con animación y salida segura del loading)
+    // Cargar clases según rol
     LaunchedEffect(role, uid) {
         if (role == null || uid.isBlank()) return@LaunchedEffect
         loading = true
@@ -100,35 +90,28 @@ fun HomeScreen(
 
         val base = db.collection("classes")
 
-        val attachListener: (com.google.firebase.firestore.Query) -> Unit = { q ->
+        fun attachListener(q: com.google.firebase.firestore.Query) {
             q.addSnapshotListener { snap, err ->
                 if (err != null) {
                     loading = false
                     classes = emptyList()
                     errorText = when ((err as? FirebaseFirestoreException)?.code) {
                         FirebaseFirestoreException.Code.PERMISSION_DENIED ->
-                            "PERMISSION_DENIED: Revisa reglas de Firestore para /classes."
+                            "PERMISSION_DENIED: revisa reglas de Firestore para /classes."
                         else -> "Error cargando clases: ${err.message}"
                     }
                     return@addSnapshotListener
                 }
 
                 val list = snap?.documents?.map { d ->
-                    d.id to ClassItem(
-                        title = d.getString("title") ?: "",
-                        description = d.getString("description") ?: "",
-                        videoLink = d.getString("videoLink") ?: "",
-                        professorId = d.getString("professorId") ?: "",
-                        assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
-                            ?: emptyList(),
-                        createdBy = d.getString("createdBy") ?: "",
-                        createdAt = d.getTimestamp("createdAt"),
-                        isActive = d.getBoolean("isActive") ?: true,
-                        imageUrl = d.getString("imageUrl") ?: ""
-                    )
+                    // Usamos el data class ClassItem global
+                    val ci = d.toObject(ClassItem::class.java) ?: ClassItem()
+                    d.id to ci.copy(id = d.id)
                 } ?: emptyList()
 
-                classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
+                classes = list.sortedByDescending {
+                    it.second.createdAt?.toDate()?.time ?: 0L
+                }
                 loading = false
                 errorText = null
             }
@@ -141,17 +124,19 @@ fun HomeScreen(
         }
     }
 
-    // 🧭 UI
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Educanet") },
                 actions = {
+                    IconButton(onClick = onOpenCart) {
+                        Icon(Icons.Filled.ShoppingCart, contentDescription = "Carrito")
+                    }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Ajustes")
+                        Icon(Icons.Filled.Settings, contentDescription = "Ajustes")
                     }
                     IconButton(onClick = onLogout) {
-                        Icon(Icons.Default.Logout, contentDescription = "Salir")
+                        Icon(Icons.Filled.Logout, contentDescription = "Salir")
                     }
                 }
             )
@@ -159,13 +144,12 @@ fun HomeScreen(
         floatingActionButton = {
             if (role == "admin") {
                 FloatingActionButton(onClick = onNewClass) {
-                    Icon(Icons.Default.Add, contentDescription = "Nueva clase")
+                    Icon(Icons.Filled.Add, contentDescription = "Nueva clase")
                 }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { pad ->
-
         Column(
             modifier = Modifier
                 .padding(pad)
@@ -173,6 +157,7 @@ fun HomeScreen(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = if (name.isBlank()) "Bienvenido/a" else "Hola, $name",
@@ -180,10 +165,14 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 )
                 role?.let {
-                    AssistChip(onClick = {}, label = { Text(it.replaceFirstChar { c -> c.uppercase() }) })
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(it.replaceFirstChar { c -> c.uppercase() }) }
+                    )
                 }
             }
 
+            // Botones rápidos
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -193,17 +182,24 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 ) { Text("Recursos") }
 
-                ElevatedButton( // <- FIX: estaba pegado al anterior
+                ElevatedButton(
                     onClick = { if (uid.isNotBlank()) onOpenProgress(uid) },
                     modifier = Modifier.weight(1f)
                 ) { Text("Progreso") }
             }
 
-            HorizontalDivider()
+            Divider()
             Text("Clases", style = MaterialTheme.typography.titleMedium)
 
-            AnimatedVisibility(visible = loading, enter = fadeIn(), exit = fadeOut()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            AnimatedVisibility(
+                visible = loading,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
                     CircularProgressIndicator()
                 }
             }
@@ -212,10 +208,17 @@ fun HomeScreen(
                 val (isLoading, list) = state
                 if (!isLoading) {
                     when {
-                        errorText != null -> Text(errorText!!, color = MaterialTheme.colorScheme.error)
+                        errorText != null -> Text(
+                            errorText!!,
+                            color = MaterialTheme.colorScheme.error
+                        )
+
                         list.isEmpty() -> Text("No hay clases para tu rol.")
+
                         else -> {
-                            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
                                 items(list.size) { i ->
                                     val (id, c) = list[i]
                                     ElevatedCard(
@@ -224,10 +227,10 @@ fun HomeScreen(
                                             .clickable { onOpenClass(id) }
                                     ) {
                                         Column(Modifier.padding(12.dp)) {
-                                            // Portada
+                                            // Portada si viene imageUrl
                                             if (c.imageUrl.isNotBlank()) {
                                                 StorageImage(
-                                                    url = c.imageUrl,           // <- FIX: param correcto
+                                                    url = c.imageUrl,
                                                     contentDescription = "Portada",
                                                     modifier = Modifier
                                                         .fillMaxWidth()
@@ -243,6 +246,7 @@ fun HomeScreen(
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
+
                                             if (c.description.isNotBlank()) {
                                                 Text(
                                                     c.description,
@@ -251,9 +255,35 @@ fun HomeScreen(
                                                     style = MaterialTheme.typography.bodyMedium
                                                 )
                                             }
+
+                                            Spacer(Modifier.height(4.dp))
+
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "$${"%.0f".format(c.price)}",
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+
+                                                val seats = c.availableSeats?.toInt()
+                                                Text(
+                                                    text = when {
+                                                        seats == null -> "Cupos: ∞"
+                                                        seats <= 0 -> "Sin cupos"
+                                                        else -> "Cupos: $seats"
+                                                    },
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+
                                             if (!c.isActive) {
                                                 Spacer(Modifier.height(4.dp))
-                                                AssistChip(onClick = {}, label = { Text("Inactiva") })
+                                                AssistChip(
+                                                    onClick = {},
+                                                    label = { Text("Inactiva") }
+                                                )
                                             }
                                         }
                                     }

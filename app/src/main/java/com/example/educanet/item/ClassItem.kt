@@ -3,6 +3,7 @@ package com.example.educanet.item
 import com.google.firebase.Timestamp
 
 data class ClassItem(
+    val id: String = "",
     val title: String = "",
     val description: String = "",
     val videoLink: String = "",
@@ -11,6 +12,7 @@ data class ClassItem(
     val createdBy: String = "",
     val createdAt: Timestamp? = null,
     val isActive: Boolean = true,
-    // portada (gs://, ruta en Storage, o URL http)
-    val imageUrl: String = ""
+    val imageUrl: String = "",       // portada
+    val price: Double = 0.0,         // precio referencial
+    val availableSeats: Long? = null // stock de cupos (Long por Firestore)
 )

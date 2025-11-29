@@ -3,167 +3,149 @@ package com.example.educanet
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument           // <- importante: de androidx.navigation, no .compose
+import androidx.navigation.navArgument
+import com.example.educanet.screen.CartScreen
 import com.example.educanet.screen.ClassDetailScreen
-import com.example.educanet.screen.CreateClassScreen
-import com.example.educanet.screen.CreateClassScreenAdmin
 import com.example.educanet.screen.HomeScreen
-import com.example.educanet.screen.LoginScreen
 import com.example.educanet.screen.ProgressScreen
-import com.example.educanet.screen.RegisterScreen
-import com.example.educanet.screen.ResourcesScreen
 import com.example.educanet.screen.SettingsScreen
-import com.google.firebase.auth.FirebaseAuth
+// importa también tus otras pantallas si las necesitas:
+// import com.example.educanet.screen.CreateClassScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
-            MaterialTheme {
-                Surface(color = MaterialTheme.colorScheme.background) {
-                    EducanetNav()
-                }
-            }
+            EducanetApp()
         }
     }
 }
 
 @Composable
-fun EducanetNav() {
-    val snackbarHostState = remember { SnackbarHostState() }
+fun EducanetApp() {
     val navController = rememberNavController()
-    val auth = FirebaseAuth.getInstance()
-    val start = if (auth.currentUser == null) "login" else "home"
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { innerPadding ->
+    MaterialTheme {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = { /* usamos TopAppBar dentro de cada pantalla, así que nada aquí */ }
+        ) { innerPadding ->
+            EducanetNav(
+                navController = navController,
+                innerPadding = innerPadding
+            )
+        }
+    }
+}
 
-        NavHost(
-            navController = navController,
-            startDestination = start,
-            modifier = Modifier.padding(innerPadding)
-        ){
-
-            // 🔐 Login (usa tu firma onSuccess/onGoRegister)
-            composable("login") {
-                LoginScreen(
-                    onSuccess = {
-                        navController.navigate("home") {
-                            popUpTo("login") { inclusive = true }
-                        }
-                    },
-                    onGoRegister = { navController.navigate("register") },
-                    snackbarHostState = snackbarHostState
-
-                )
-            }
-
-            // 📝 Registro (usa tu firma onSuccess/onGoLogin)
-            composable("register") {
-                RegisterScreen(
-                    onSuccess = {
-                        navController.navigate("home") {
-                            popUpTo("login") { inclusive = true }
-                        }
-                    },
-                    onGoLogin = { navController.popBackStack() }
-                )
-            }
-
-            // 🏠 Home
-            composable("home") {
-                HomeScreen(
-                    onLogout = {
-                        FirebaseAuth.getInstance().signOut()
-                        navController.navigate("login") {
-                            popUpTo("home") { inclusive = true }
-                        }
-                    },
-                    onNewClass = { navController.navigate("createClass") },
-                    onOpenClass = { id -> navController.navigate("classDetail/$id") },
-                    onOpenResources = { navController.navigate("resources") },
-                    onOpenProgress = { userId ->
-                        navController.navigate("progress/$userId")
-                    },
-                    onOpenSettings = { navController.navigate("Settings") }
-
-                )
-            }
-
-            // ➕ Crear clase
-            composable("createClass") {
-                CreateClassScreen(
-                    onCancel = { navController.popBackStack() },
-                    onSaved = { navController.popBackStack() }
-                )
-            }
-
-            // 📄 Detalle clase
-            composable(
-                route = "classDetail/{id}",
-                arguments = listOf(navArgument("id") { type = NavType.StringType })
-            ) { backStack ->
-                val classId = backStack.arguments?.getString("id") ?: ""
-                ClassDetailScreen(
-                    classId = classId,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            // 📚 Recursos
-            composable("resources") {
-                ResourcesScreen(onBack = { navController.popBackStack() })
-            }
-
-            // 📈 Progreso
-            composable(
-                route = "progress/{userId}", arguments = listOf(navArgument("userId") { type = NavType.StringType })
-            ) { backStackEntry ->
-               val userId = backStackEntry.arguments?.getString("userId")
-
-                ProgressScreen(
-                    onBack = { navController.popBackStack() },
-                    studentId = userId
-                )
-            }
-
-            // ⚙️ Ajustes (DataStore + avatar local)
-            composable("settings") {
-                SettingsScreen(onBack = { navController.popBackStack() })
-            }
-            composable("createClass") {
-                CreateClassScreenAdmin(
-                    onBack = { navController.popBackStack() },
-                    onSaved = { navController.popBackStack() }
-                )
-            }
-            composable("createClassAdmin") {
-                CreateClassScreenAdmin(
-                    onBack = { navController.popBackStack() },
-                    onSaved = {
-                        navController.popBackStack() // vuelve al Home
-                        // opcional: mostrar snackbar o refresh
-                    }
-                )
-            }
-
-
+@Composable
+fun EducanetNav(
+    navController: NavHostController,
+    innerPadding: PaddingValues
+) {
+    NavHost(
+        navController = navController,
+        startDestination = "home",
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        // HOME
+        composable(route = "home") {
+            HomeScreen(
+                onLogout = {
+                    // aquí puedes hacer signOut de Firebase si quieres
+                    // FirebaseAuth.getInstance().signOut()
+                    // y quizá navegar a una pantalla de login
+                },
+                onNewClass = {
+                    navController.navigate("createClass")
+                },
+                onOpenClass = { classId ->
+                    navController.navigate("classDetail/$classId")
+                },
+                onOpenResources = {
+                    // si tienes otra pantalla de recursos, navega aquí
+                    // navController.navigate("resources")
+                },
+                onOpenProgress = { studentId ->
+                    navController.navigate("progress/$studentId")
+                },
+                onOpenSettings = {
+                    navController.navigate("settings")
+                },
+                onOpenCart = {                    // 👈 ESTE ES EL QUE FALTABA
+                    navController.navigate("cart")
+                }
+            )
         }
 
+        // DETALLE DE CLASE + NOTAS + RESEÑAS
+        composable(
+            route = "classDetail/{classId}",
+            arguments = listOf(
+                navArgument("classId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val classId = backStackEntry.arguments?.getString("classId") ?: ""
+            ClassDetailScreen(
+                classId = classId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // PROGRESO (alumno / apoderado)
+        composable(
+            route = "progress/{studentId}",
+            arguments = listOf(
+                navArgument("studentId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val studentId = backStackEntry.arguments?.getString("studentId")
+            ProgressScreen(
+                onBack = { navController.popBackStack() },
+                studentId = studentId
+            )
+        }
+
+        // AJUSTES (avatar, cámara + galería)
+        composable(route = "settings") {
+            SettingsScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // CARRITO
+        composable(route = "cart") {
+            CartScreen(
+                onBack = { navController.popBackStack() },
+                onCheckoutSuccess = {
+                    // después de confirmar inscripción, volvemos atrás
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        // CREAR CLASE (si tienes esta pantalla)
+        composable(route = "createClass") {
+            // Descomenta y ajusta si tienes CreateClassScreen
+            /*
+            CreateClassScreen(
+                onCancel = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
+            )
+            */
+        }
     }
 }
