@@ -3,14 +3,22 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Permisos generales -->
+    <!-- Internet para Firebase Auth / Firestore / Storage / Coil -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Estado de red (opcional pero útil para manejar errores de conexión) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Cámara para tomar foto de avatar -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Notificaciones (Firebase Cloud Messaging) en Android 13+ -->
     <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS"
         tools:targetApi="33" />
-    <uses-feature android:name="android.hardware.camera"
-        android:required="false"/>
+
+    <!-- Declarar la cámara como feature, pero no obligatoria -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -22,7 +30,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Educanet">
 
-        <!-- FileProvider para acceder a la cámara -->
+        <!-- FileProvider (por si más adelante usas fotos en archivo físico).
+             Si solo usas TakePicturePreview() lo puedes dejar igual, no molesta. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
@@ -33,6 +42,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Actividad principal con Compose y NavHost -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -43,5 +53,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
     </application>
 </manifest>

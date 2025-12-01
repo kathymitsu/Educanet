@@ -10,6 +10,10 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
+// 👇 NUEVOS IMPORTS
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
@@ -24,7 +28,6 @@ fun LoginScreen(
     var loading by remember { mutableStateOf(false) }
 
     Scaffold(
-        // 🔧 AQUÍ ESTABA EL PROBLEMA
         snackbarHost = { SnackbarHost(hostState = snackbar) }
     ) { pad ->
         Box(
@@ -47,7 +50,10 @@ fun LoginScreen(
                     onValueChange = { email = it },
                     label = { Text("Correo") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // 👇 Appium lo verá como content-desc = "input_email"
+                        .semantics { contentDescription = "input_email" }
                 )
 
                 OutlinedTextField(
@@ -56,7 +62,10 @@ fun LoginScreen(
                     label = { Text("Contraseña") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // 👇 Appium lo verá como "input_password"
+                        .semantics { contentDescription = "input_password" }
                 )
 
                 Button(
@@ -83,7 +92,10 @@ fun LoginScreen(
                             }
                     },
                     enabled = !loading,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // 👇 Botón login visible para Appium
+                        .semantics { contentDescription = "btn_login" }
                 ) {
                     Text(if (loading) "Ingresando..." else "Iniciar sesión")
                 }

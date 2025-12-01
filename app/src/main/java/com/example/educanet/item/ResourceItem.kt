@@ -3,9 +3,10 @@ package com.example.educanet.item
 import com.google.firebase.Timestamp
 
 data class ResourceItem(
+    val id: String = "",
     val title: String = "",
-    val type: String = "",   // "book" | "article" | "video"
+    val description: String = "",
     val url: String = "",
-    val createdBy: String = "",
+    val type: String = "",          // "video", "pdf", "link", etc.
     val createdAt: Timestamp? = null
 )

@@ -2,7 +2,6 @@
 
 package com.example.educanet.screen
 
-import androidx.compose.ui.draw.clip
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -18,7 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -36,9 +35,9 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
-    val db   = remember { FirebaseFirestore.getInstance() }
-    val st   = remember { FirebaseStorage.getInstance() }
-    val uid  = auth.currentUser?.uid.orEmpty()
+    val db = remember { FirebaseFirestore.getInstance() }
+    val st = remember { FirebaseStorage.getInstance() }
+    val uid = auth.currentUser?.uid.orEmpty()
 
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
@@ -46,9 +45,9 @@ fun SettingsScreen(
     var avatarUrl by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString().orEmpty()) }
     var isUploading by remember { mutableStateOf(false) }
 
-    // GALERÍA
+    // ---------- GALERÍA ----------
     val pickFromGallery = rememberLauncherForActivityResult(GetContent()) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+        if (uri == null || uid.isBlank()) return@rememberLauncherForActivityResult
         scope.launch {
             isUploading = true
             try {
@@ -57,14 +56,16 @@ fun SettingsScreen(
                 avatarUrl = url
                 snack.showSnackbar("Avatar actualizado desde galería")
             } catch (e: Exception) {
-                snack.showSnackbar("Error: ${e.message}")
-            } finally { isUploading = false }
+                handleAvatarError(e, snack)
+            } finally {
+                isUploading = false
+            }
         }
     }
 
-    // CÁMARA (Bitmap directo, sin MediaStore ni FileProvider)
+    // ---------- CÁMARA (bitmap en memoria) ----------
     val takeFromCamera = rememberLauncherForActivityResult(TakePicturePreview()) { bmp: Bitmap? ->
-        if (bmp == null) return@rememberLauncherForActivityResult
+        if (bmp == null || uid.isBlank()) return@rememberLauncherForActivityResult
         scope.launch {
             isUploading = true
             try {
@@ -73,15 +74,20 @@ fun SettingsScreen(
                 avatarUrl = url
                 snack.showSnackbar("Avatar actualizado desde cámara")
             } catch (e: Exception) {
-                snack.showSnackbar("Error: ${e.message}")
-            } finally { isUploading = false }
+                handleAvatarError(e, snack)
+            } finally {
+                isUploading = false
+            }
         }
     }
 
-    // Permiso de cámara en runtime
+    // ---------- PERMISO DE CÁMARA ----------
     val requestCameraPerm = rememberLauncherForActivityResult(RequestPermission()) { granted ->
-        if (granted) takeFromCamera.launch(null)
-        else scope.launch { snack.showSnackbar("Permiso de cámara denegado") }
+        if (granted) {
+            takeFromCamera.launch(null)
+        } else {
+            scope.launch { snack.showSnackbar("Permiso de cámara denegado") }
+        }
     }
 
     Scaffold(
@@ -98,7 +104,10 @@ fun SettingsScreen(
         snackbarHost = { SnackbarHost(snack) }
     ) { pad ->
         Column(
-            modifier = Modifier.padding(pad).padding(16.dp).fillMaxSize(),
+            modifier = Modifier
+                .padding(pad)
+                .padding(16.dp)
+                .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -108,48 +117,67 @@ fun SettingsScreen(
                     model = avatarUrl,
                     contentDescription = "Avatar",
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(120.dp).clip(MaterialTheme.shapes.extraLarge)
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(MaterialTheme.shapes.extraLarge)
                 )
             } else {
-                Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 2.dp,
-                    modifier = Modifier.size(120.dp)) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    tonalElevation = 2.dp,
+                    modifier = Modifier.size(120.dp)
+                ) {
+                    Box(
+                        Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text("Sin\navatar")
                     }
                 }
             }
 
-            if (isUploading) CircularProgressIndicator()
+            if (isUploading) {
+                CircularProgressIndicator()
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(enabled = !isUploading, onClick = {
-                    pickFromGallery.launch("image/*")
-                }) {
+                FilledTonalButton(
+                    enabled = !isUploading,
+                    onClick = {
+                        pickFromGallery.launch("image/*")
+                    }
+                ) {
                     Icon(Icons.Filled.Image, contentDescription = null)
-                    Spacer(Modifier.width(8.dp)); Text("Galería")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Galería")
                 }
 
-                FilledTonalButton(enabled = !isUploading, onClick = {
-                    requestCameraPerm.launch(android.Manifest.permission.CAMERA)
-                }) {
+                FilledTonalButton(
+                    enabled = !isUploading,
+                    onClick = {
+                        requestCameraPerm.launch(android.Manifest.permission.CAMERA)
+                    }
+                ) {
                     Icon(Icons.Filled.CameraAlt, contentDescription = null)
-                    Spacer(Modifier.width(8.dp)); Text("Cámara")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Cámara")
                 }
             }
         }
     }
 }
 
-/* --------- Helpers --------- */
+/* ------------ Helpers de subida ------------- */
 
 private suspend fun uploadAvatarFromUri(
     storage: FirebaseStorage,
     uid: String,
     uri: Uri
 ): String {
+    // Siempre usamos la misma ruta: sobreescribe avatar anterior
     val ref = storage.reference.child("avatars/$uid.jpg")
-    ref.putFile(uri).await()
-    return ref.downloadUrl.await().toString()
+    ref.putFile(uri).await()          // sube el archivo
+    return ref.downloadUrl.await().toString() // obtiene URL pública
 }
 
 private suspend fun uploadAvatarFromBitmap(
@@ -171,14 +199,33 @@ private suspend fun persistAvatar(
     uid: String,
     url: String
 ) {
-    // Firestore
+    // Guarda en Firestore (perfil usuario)
     db.collection("users").document(uid)
         .update(mapOf("avatar" to url))
         .await()
 
-    // Auth (sin extensión deprecada)
+    // Actualiza foto en Firebase Auth
     val profile = UserProfileChangeRequest.Builder()
         .setPhotoUri(url.toUri())
         .build()
     auth.currentUser?.updateProfile(profile)?.await()
+}
+
+/**
+ * Maneja errores al subir avatar, para que "Object does not exist at location"
+ * no se vea como un error grave en la app.
+ */
+private suspend fun handleAvatarError(
+    e: Exception,
+    snack: SnackbarHostState
+) {
+    val msg = e.message ?: "Error al actualizar avatar"
+
+    // Este es el mensaje feo de Firebase Storage
+    if (msg.contains("Object does not exist at location")) {
+        // Lo convertimos en algo más entendible / suave
+        snack.showSnackbar("No se encontró la imagen en Storage. Intenta subirla nuevamente.")
+    } else {
+        snack.showSnackbar("Error al subir avatar: $msg")
+    }
 }

@@ -1,100 +1,109 @@
 package com.example.educanet.screen
 
-import android.content.Intent
-import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.educanet.item.ResourceItem
-import com.google.firebase.Timestamp
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResourcesScreen(onBack: () -> Unit) {
+fun ResourcesScreen(
+    onBack: () -> Unit
+) {
     val db = remember { FirebaseFirestore.getInstance() }
-    val auth = remember { FirebaseAuth.getInstance() }
-    val uid = auth.currentUser?.uid
+    val scope = rememberCoroutineScope()
+    val snack = remember { SnackbarHostState() }
 
-    var role by remember { mutableStateOf<String?>(null) }
+    var items by remember { mutableStateOf<List<ResourceItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var resources by remember { mutableStateOf(listOf<Pair<String, ResourceItem>>()) }
 
-    var showDialog by remember { mutableStateOf(false) }
-    var title by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("article") }
-    var url by remember { mutableStateOf("") }
-
-    // rol
+    // Cargar recursos (para cualquier usuario autenticado)
     LaunchedEffect(Unit) {
-        uid ?: return@LaunchedEffect
-        db.collection("users").document(uid).get()
-            .addOnSuccessListener { role = it.getString("role") }
-            .addOnFailureListener { e -> error = e.message }
-    }
-
-    // listener
-    LaunchedEffect(true) {
-        db.collection("resources").orderBy("createdAt", Query.Direction.DESCENDING)
+        db.collection("resources")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, e ->
-                if (e != null) { error = e.message; loading = false; return@addSnapshotListener }
-                resources = snap?.documents?.mapNotNull { d ->
-                    d.toObject(ResourceItem::class.java)?.let { d.id to it }
+                if (e != null) {
+                    error = e.message
+                    loading = false
+                    return@addSnapshotListener
+                }
+
+                items = snap?.documents?.map { d ->
+                    val r = d.toObject(ResourceItem::class.java) ?: ResourceItem()
+                    r.copy(id = d.id)
                 } ?: emptyList()
+
+                error = null
                 loading = false
             }
     }
 
-    val ctx = LocalContext.current
-    fun openUrl(link: String) = ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
-
-    fun saveResource() {
-        val data = hashMapOf(
-            "title" to title.trim(),
-            "type" to type.trim(),
-            "url" to url.trim(),
-            "createdBy" to (uid ?: ""),
-            "createdAt" to Timestamp.now()
-        )
-        db.collection("resources").add(data)
-        showDialog = false; title = ""; type = "article"; url = ""
-    }
-
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = { Text("Recursos") },
-                navigationIcon = { IconButton(onClick = onBack) { Text("←") } }
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                }
             )
         },
-        floatingActionButton = {
-            if (role == "profesor") FloatingActionButton(onClick = { showDialog = true }) { Text("+") }
-        }
+        snackbarHost = { SnackbarHost(snack) }
     ) { pad ->
-        Column(Modifier.padding(pad).padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(pad)
+                .padding(16.dp)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             when {
-                loading -> CircularProgressIndicator()
-                error != null -> Text("Error: $error", color = MaterialTheme.colorScheme.error)
-                resources.isEmpty() -> Text("No hay recursos aún")
+                loading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                error != null -> {
+                    Text(
+                        text = "Error: $error",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
+                items.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Aún no hay recursos disponibles.")
+                    }
+                }
+
                 else -> {
-                    LazyColumn {
-                        items(resources.size) { i ->
-                            val (id, r) = resources[i]
-                            ElevatedCard(
-                                onClick = { openUrl(r.url) },
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                            ) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text(r.title, style = MaterialTheme.typography.titleMedium)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text("${r.type.uppercase()} • ${r.url}")
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(items, key = { it.id }) { res ->
+                            ResourceCard(res) { url ->
+                                // si quieres abrir el link con un Intent:
+                                // val ctx = LocalContext.current
+                                // val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                // ctx.startActivity(intent)
+                                scope.launch {
+                                    snack.showSnackbar("Abrir: $url")
                                 }
                             }
                         }
@@ -103,24 +112,52 @@ fun ResourcesScreen(onBack: () -> Unit) {
             }
         }
     }
+}
 
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = { Text("Nuevo recurso") },
-            text = {
-                Column {
-                    OutlinedTextField(title, { title = it }, label = { Text("Título") }, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(type, { type = it }, label = { Text("Tipo (book/article/video)") }, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(url, { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { saveResource() }, enabled = title.isNotBlank() && url.isNotBlank()) { Text("Guardar") }
-            },
-            dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Cancelar") } }
-        )
+@Composable
+private fun ResourceCard(
+    item: ResourceItem,
+    onClick: (String) -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = item.url.isNotBlank()) {
+                onClick(item.url)
+            }
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                text = item.title.ifBlank { "Recurso sin título" },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            if (item.description.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = item.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            val label = when (item.type.lowercase()) {
+                "video" -> "Video"
+                "pdf"   -> "PDF"
+                "link"  -> "Enlace"
+                else    -> "Recurso"
+            }
+
+            AssistChip(
+                onClick = { if (item.url.isNotBlank()) onClick(item.url) },
+                label = { Text(label) }
+            )
+        }
     }
 }
