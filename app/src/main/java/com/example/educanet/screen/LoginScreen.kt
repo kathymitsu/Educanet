@@ -8,11 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import kotlinx.coroutines.launch
-
-// 👇 NUEVOS IMPORTS
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,10 +47,7 @@ fun LoginScreen(
                     onValueChange = { email = it },
                     label = { Text("Correo") },
                     singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // 👇 Appium lo verá como content-desc = "input_email"
-                        .semantics { contentDescription = "input_email" }
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
@@ -62,20 +56,19 @@ fun LoginScreen(
                     label = { Text("Contraseña") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // 👇 Appium lo verá como "input_password"
-                        .semantics { contentDescription = "input_password" }
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Button(
                     onClick = {
+                        // 💬 Mensaje cuando hay campos vacíos
                         if (email.isBlank() || password.isBlank()) {
                             scope.launch {
-                                snackbar.showSnackbar("Completa correo y contraseña.")
+                                snackbar.showSnackbar("Por favor no dejes campos vacíos.")
                             }
                             return@Button
                         }
+
                         loading = true
                         auth.signInWithEmailAndPassword(email, password)
                             .addOnSuccessListener {
@@ -84,18 +77,29 @@ fun LoginScreen(
                             }
                             .addOnFailureListener { e ->
                                 loading = false
+
+                                val fbEx = e as? FirebaseAuthException
+                                val userMsg = when (fbEx?.errorCode) {
+                                    "ERROR_INVALID_EMAIL" ->
+                                        "El formato del correo no es válido."
+                                    "ERROR_USER_NOT_FOUND" ->
+                                        "No existe una cuenta registrada con este correo."
+                                    "ERROR_WRONG_PASSWORD",
+                                    "ERROR_INVALID_CREDENTIAL" ->
+                                        "Correo o contraseña incorrectos. Intenta nuevamente."
+                                    "ERROR_USER_DISABLED" ->
+                                        "Esta cuenta ha sido deshabilitada."
+                                    else ->
+                                        "No se pudo iniciar sesión. Revisa tus datos e inténtalo nuevamente."
+                                }
+
                                 scope.launch {
-                                    snackbar.showSnackbar(
-                                        e.message ?: "Error al iniciar sesión"
-                                    )
+                                    snackbar.showSnackbar(userMsg)
                                 }
                             }
                     },
                     enabled = !loading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // 👇 Botón login visible para Appium
-                        .semantics { contentDescription = "btn_login" }
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(if (loading) "Ingresando..." else "Iniciar sesión")
                 }

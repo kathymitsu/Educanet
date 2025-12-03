@@ -1,94 +1,167 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.example.educanet.screen
 
-import android.graphics.Bitmap
+import android.content.ContentResolver
+import android.content.ContentValues
+import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts.GetContent
-import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
-import androidx.activity.result.contract.ActivityResultContracts.TakePicturePreview
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
-import coil.compose.AsyncImage
+import androidx.core.content.FileProvider
+import coil.compose.AsyncImage // Asume que estás usando Coil
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.UserProfileChangeRequest
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
+// Importaciones de Coroutines
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.withContext
+// Importaciones de I/O
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import android.Manifest
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit
 ) {
+    val appContext = LocalContext.current.applicationContext
     val auth = remember { FirebaseAuth.getInstance() }
-    val db = remember { FirebaseFirestore.getInstance() }
-    val st = remember { FirebaseStorage.getInstance() }
     val uid = auth.currentUser?.uid.orEmpty()
 
-    val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    var avatarUrl by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString().orEmpty()) }
-    var isUploading by remember { mutableStateOf(false) }
+    var avatarImagePath by remember { mutableStateOf<Uri?>(null) }
+    var loadingStatus by remember { mutableStateOf(false) }
 
-    // ---------- GALERÍA ----------
-    val pickFromGallery = rememberLauncherForActivityResult(GetContent()) { uri: Uri? ->
-        if (uri == null || uid.isBlank()) return@rememberLauncherForActivityResult
-        scope.launch {
-            isUploading = true
-            try {
-                val url = uploadAvatarFromUri(st, uid, uri)
-                persistAvatar(db, auth, uid, url)
-                avatarUrl = url
-                snack.showSnackbar("Avatar actualizado desde galería")
-            } catch (e: Exception) {
-                handleAvatarError(e, snack)
-            } finally {
-                isUploading = false
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    // --- Permisos ---
+    val readStoragePermissionToAsk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    val storagePermissionState = rememberPermissionState(readStoragePermissionToAsk)
+
+    // 🔥 Permiso de Notificaciones (requerido para el profesor)
+    val notificationPermissionState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
+
+    // Función simulada para obtener el rol (En un proyecto real, esto se cargaría de Firestore)
+    val userRole = remember(uid) {
+        // Lógica de ejemplo: si el UID coincide con un ID de profesor conocido
+        if (uid == "ALGÚN_UID_DE_PROFESOR") "professor" else "student"
+    }
+
+    // ---------- Launchers de galería y cámara ----------
+    val galleryLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            if (uri != null) {
+                scope.launch {
+                    val localFile = copyUriToAppStorage(appContext, uri)
+
+                    if (localFile != null) {
+                        loadingStatus = true
+
+                        val success = saveAvatarLocally(Uri.fromFile(localFile), appContext)
+
+                        loadingStatus = false
+                        if (success) {
+                            val finalUri = getLatestImageUri(appContext)
+                            if (finalUri != null) {
+                                avatarImagePath = finalUri
+                            }
+                            scope.launch { snack.showSnackbar("Imagen guardada localmente.") }
+                        } else {
+                            scope.launch { snack.showSnackbar("Error al guardar la imagen localmente.") }
+                        }
+                        localFile.delete()
+                    } else {
+                        scope.launch { snack.showSnackbar("Error: No se pudo copiar la imagen.") }
+                    }
+                }
+            } else {
+                scope.launch { snack.showSnackbar("No se seleccionó ninguna imagen.") }
             }
         }
-    }
 
-    // ---------- CÁMARA (bitmap en memoria) ----------
-    val takeFromCamera = rememberLauncherForActivityResult(TakePicturePreview()) { bmp: Bitmap? ->
-        if (bmp == null || uid.isBlank()) return@rememberLauncherForActivityResult
-        scope.launch {
-            isUploading = true
-            try {
-                val url = uploadAvatarFromBitmap(st, uid, bmp)
-                persistAvatar(db, auth, uid, url)
-                avatarUrl = url
-                snack.showSnackbar("Avatar actualizado desde cámara")
-            } catch (e: Exception) {
-                handleAvatarError(e, snack)
-            } finally {
-                isUploading = false
+    val cameraLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+            scope.launch {
+                if (success && cameraUri != null) {
+                    loadingStatus = true
+
+                    val saveSuccess = saveAvatarLocally(cameraUri!!, appContext)
+
+                    loadingStatus = false
+                    if (saveSuccess) {
+                        val finalUri = getLatestImageUri(appContext)
+                        if (finalUri != null) {
+                            avatarImagePath = finalUri
+                        }
+                        scope.launch { snack.showSnackbar("Foto guardada localmente.") }
+                    } else {
+                        scope.launch { snack.showSnackbar("Error al guardar la foto localmente.") }
+                    }
+
+                    deleteFileFromUri(appContext, cameraUri!!)
+                    cameraUri = null
+                } else if (cameraUri != null) {
+                    deleteFileFromUri(appContext, cameraUri!!)
+                    cameraUri = null
+                    scope.launch { snack.showSnackbar("Captura de cámara cancelada o fallida.") }
+                }
             }
         }
-    }
 
-    // ---------- PERMISO DE CÁMARA ----------
-    val requestCameraPerm = rememberLauncherForActivityResult(RequestPermission()) { granted ->
-        if (granted) {
-            takeFromCamera.launch(null)
-        } else {
-            scope.launch { snack.showSnackbar("Permiso de cámara denegado") }
+    // ... (El resto de funciones auxiliares como createCameraUriWithFileProvider) ...
+    fun createCameraUriWithFileProvider(context: Context): Uri? {
+        try {
+            val tempFile = File(
+                context.externalCacheDir,
+                "temp_avatar_${System.currentTimeMillis()}.jpg"
+            )
+
+            if (!tempFile.exists()) {
+                tempFile.createNewFile()
+            }
+
+            return FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                tempFile
+            )
+        } catch (e: Exception) {
+            scope.launch { snack.showSnackbar("Error al preparar la URI de la cámara: ${e.message}") }
+            return null
         }
     }
+
 
     Scaffold(
         topBar = {
@@ -96,7 +169,7 @@ fun SettingsScreen(
                 title = { Text("Ajustes") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 }
             )
@@ -108,124 +181,273 @@ fun SettingsScreen(
                 .padding(pad)
                 .padding(16.dp)
                 .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Vista previa del avatar
-            if (avatarUrl.isNotBlank()) {
-                AsyncImage(
-                    model = avatarUrl,
-                    contentDescription = "Avatar",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(120.dp)
-                        .clip(MaterialTheme.shapes.extraLarge)
-                )
-            } else {
-                Surface(
-                    shape = MaterialTheme.shapes.extraLarge,
-                    tonalElevation = 2.dp,
-                    modifier = Modifier.size(120.dp)
-                ) {
-                    Box(
-                        Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Sin\navatar")
-                    }
+
+            // ---------- Avatar UI ----------
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color(0xFFF1E9FF)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (avatarImagePath != null) {
+                    AsyncImage(
+                        model = avatarImagePath,
+                        contentDescription = "Avatar Local",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text(
+                        text = "Sin\navatar",
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
 
-            if (isUploading) {
+            if (loadingStatus) {
                 CircularProgressIndicator()
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(
-                    enabled = !isUploading,
+            // ---------- Botones de Galería/Cámara ----------
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Button(
                     onClick = {
-                        pickFromGallery.launch("image/*")
-                    }
+                        if (storagePermissionState.status.isGranted) {
+                            galleryLauncher.launch("image/*")
+                        } else {
+                            storagePermissionState.launchPermissionRequest()
+                        }
+                    },
+                    enabled = !loadingStatus && uid.isNotBlank(),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.Image, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
                     Text("Galería")
                 }
 
-                FilledTonalButton(
-                    enabled = !isUploading,
+                Button(
                     onClick = {
-                        requestCameraPerm.launch(android.Manifest.permission.CAMERA)
-                    }
+                        val uri = createCameraUriWithFileProvider(appContext)
+                        if (uri != null) {
+                            cameraUri = uri
+                            cameraLauncher.launch(uri)
+                        } else {
+                            scope.launch {
+                                snack.showSnackbar("No se pudo crear archivo temporal.")
+                            }
+                        }
+                    },
+                    enabled = !loadingStatus && uid.isNotBlank(),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.CameraAlt, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
                     Text("Cámara")
                 }
             }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ---------- Botón de Permiso de Notificaciones ----------
+            Button(
+                onClick = { notificationPermissionState.launchPermissionRequest() },
+                enabled = !notificationPermissionState.status.isGranted,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (notificationPermissionState.status.isGranted) Color.Green else Color.Red
+                )
+            ) {
+                Text(if (notificationPermissionState.status.isGranted) "✅ Notificaciones ON" else "🔔 Activar Notificaciones")
+            }
+
+            // ---------- Ejemplo de Recurso con Permiso de Eliminación ----------
+            Spacer(modifier = Modifier.height(20.dp))
+            Divider()
+            Text("Gestión de Recursos (Demo Profesor)", style = MaterialTheme.typography.titleMedium)
+
+            // Simulación de un recurso subido por el mismo usuario (para probar 'canDelete')
+            ResourceItem(
+                resourceTitle = "Recurso 1: Guía de estudio (Subido por usted)",
+                resourceUploaderUid = uid, // Simulación: El recurso lo subió este usuario
+                currentUserRole = userRole,
+                onDelete = { title -> scope.launch { snack.showSnackbar("Recurso '$title' eliminado (si las reglas de Firebase lo permiten).") } }
+            )
+
+            // Simulación de un recurso subido por otro usuario
+            ResourceItem(
+                resourceTitle = "Recurso 2: Video de la clase (Otro usuario)",
+                resourceUploaderUid = "OTRO_UID_DIFERENTE", // Otro usuario
+                currentUserRole = userRole,
+                onDelete = { title -> scope.launch { snack.showSnackbar("Recurso '$title' eliminado (si las reglas de Firebase lo permiten).") } }
+            )
         }
     }
 }
 
-/* ------------ Helpers de subida ------------- */
+// ----------------------------------------------------------------------
+// FUNCIONES AUXILIARES DE RECURSOS Y GUARDADO
+// ----------------------------------------------------------------------
 
-private suspend fun uploadAvatarFromUri(
-    storage: FirebaseStorage,
-    uid: String,
-    uri: Uri
-): String {
-    // Siempre usamos la misma ruta: sobreescribe avatar anterior
-    val ref = storage.reference.child("avatars/$uid.jpg")
-    ref.putFile(uri).await()          // sube el archivo
-    return ref.downloadUrl.await().toString() // obtiene URL pública
-}
-
-private suspend fun uploadAvatarFromBitmap(
-    storage: FirebaseStorage,
-    uid: String,
-    bmp: Bitmap
-): String {
-    val ref = storage.reference.child("avatars/$uid.jpg")
-    val baos = ByteArrayOutputStream()
-    bmp.compress(Bitmap.CompressFormat.JPEG, 90, baos)
-    val data = baos.toByteArray()
-    ref.putBytes(data).await()
-    return ref.downloadUrl.await().toString()
-}
-
-private suspend fun persistAvatar(
-    db: FirebaseFirestore,
-    auth: FirebaseAuth,
-    uid: String,
-    url: String
+/**
+ * Componente que demuestra el permiso de eliminación basado en roles.
+ */
+@Composable
+fun ResourceItem(
+    resourceTitle: String,
+    resourceUploaderUid: String,
+    currentUserRole: String,
+    onDelete: (String) -> Unit
 ) {
-    // Guarda en Firestore (perfil usuario)
-    db.collection("users").document(uid)
-        .update(mapOf("avatar" to url))
-        .await()
+    val auth = remember { FirebaseAuth.getInstance() }
+    val currentUserId = auth.currentUser?.uid
 
-    // Actualiza foto en Firebase Auth
-    val profile = UserProfileChangeRequest.Builder()
-        .setPhotoUri(url.toUri())
-        .build()
-    auth.currentUser?.updateProfile(profile)?.await()
+    // Permiso de eliminación:
+    // 1. Es profesor.
+    // 2. O subió el recurso.
+    val canDelete = (currentUserRole == "professor") || (currentUserId == resourceUploaderUid)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = resourceTitle,
+            modifier = Modifier.weight(1f)
+        )
+
+        if (canDelete) {
+            IconButton(
+                onClick = { onDelete(resourceTitle) },
+                colors = IconButtonDefaults.iconButtonColors(contentColor = Color.Red)
+            ) {
+                Icon(Icons.Filled.Delete, contentDescription = "Eliminar Recurso")
+            }
+        } else {
+            // Un estudiante o un usuario sin permisos solo puede ver
+            Text("Solo ver", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+
+/**
+ * Copia el contenido de cualquier URI externa (Galería)
+ * a un archivo temporal seguro en el caché de la aplicación.
+ */
+private fun copyUriToAppStorage(context: Context, uri: Uri): File? {
+    return try {
+        val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+
+        val tempFile = File(context.cacheDir, "temp_upload_${System.currentTimeMillis()}.jpg")
+
+        if (inputStream != null) {
+            val outputStream = FileOutputStream(tempFile)
+
+            inputStream.copyTo(outputStream)
+
+            inputStream.close()
+            outputStream.close()
+
+            tempFile
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
 }
 
 /**
- * Maneja errores al subir avatar, para que "Object does not exist at location"
- * no se vea como un error grave en la app.
+ * Función auxiliar para borrar el archivo temporal creado por FileProvider
  */
-private suspend fun handleAvatarError(
-    e: Exception,
-    snack: SnackbarHostState
-) {
-    val msg = e.message ?: "Error al actualizar avatar"
-
-    // Este es el mensaje feo de Firebase Storage
-    if (msg.contains("Object does not exist at location")) {
-        // Lo convertimos en algo más entendible / suave
-        snack.showSnackbar("No se encontró la imagen en Storage. Intenta subirla nuevamente.")
-    } else {
-        snack.showSnackbar("Error al subir avatar: $msg")
+private fun deleteFileFromUri(context: Context, uri: Uri) {
+    try {
+        val file = uri.path?.let { File(it) }
+        file?.let {
+            if (it.exists()) {
+                val ignored = it.delete()
+            }
+        }
+    } catch (_: Exception) {
+        // Ignorar si falla la eliminación
     }
+}
+
+/**
+ * 💾 Guarda el archivo en la galería del dispositivo (storage local).
+ */
+private fun saveAvatarLocally(
+    uri: Uri,
+    context: Context
+): Boolean {
+    val resolver: ContentResolver = context.contentResolver
+
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, "MiAvatar_${System.currentTimeMillis()}.jpg")
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/EducanetAvatars")
+    }
+
+    var outputStream: OutputStream? = null
+    var success = false
+
+    try {
+        val imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+        if (imageUri != null) {
+            outputStream = resolver.openOutputStream(imageUri)
+        }
+
+        if (outputStream != null) {
+            val inputStream = resolver.openInputStream(uri)
+
+            if (inputStream != null) {
+                inputStream.copyTo(outputStream)
+                success = true
+            }
+            inputStream?.close()
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    } finally {
+        outputStream?.close()
+    }
+    return success
+}
+
+/**
+ * 🔍 Obtiene la URI de la última imagen guardada en MediaStore para mostrarla.
+ */
+private fun getLatestImageUri(context: Context): Uri? {
+    val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        MediaStore.Images.Media.getContentUri(
+            MediaStore.VOLUME_EXTERNAL_PRIMARY
+        )
+    } else {
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    }
+
+    val projection = arrayOf(MediaStore.Images.Media._ID)
+    val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+
+    context.contentResolver.query(
+        collection,
+        projection,
+        null,
+        null,
+        sortOrder
+    )?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            val id = cursor.getLong(idColumn)
+            return Uri.withAppendedPath(collection, id.toString())
+        }
+    }
+    return null
 }

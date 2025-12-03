@@ -9,10 +9,31 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Grade
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.educanet.item.ClassItem
@@ -23,15 +44,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.launch
-
-data class ReviewItem(
-    val id: String = "",
-    val userId: String = "",
-    val userName: String = "",
-    val rating: Int = 5,
-    val comment: String = "",
-    val createdAt: Timestamp? = null
-)
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,36 +63,40 @@ fun ClassDetailScreen(
     var role by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
 
+    // uid -> nombre del alumno
     var assignedNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     var grades by remember { mutableStateOf(listOf<GradeItem>()) }
     var showAddEdit by remember { mutableStateOf(false) }
     var editing: GradeItem? by remember { mutableStateOf(null) }
 
-    var reviews by remember { mutableStateOf(listOf<ReviewItem>()) }
-    var myRatingText by remember { mutableStateOf("5") }
-    var myComment by remember { mutableStateOf("") }
-    var reviewError by remember { mutableStateOf<String?>(null) }
+    // Profesores (para que el admin asigne uno)
+    var professors by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var selectedProfessorId: String? by remember { mutableStateOf("") }
 
-    // --------- Cargar rol y clase ----------
+    // ---------- Cargar rol y clase ----------
     LaunchedEffect(uid, classId) {
         loading = true
 
         db.collection("users").document(uid).get()
             .addOnSuccessListener { role = it.getString("role") }
             .addOnFailureListener { e ->
-                scope.launch { snack.showSnackbar("Error al obtener rol: ${e.message}") }
+                scope.launch { snack.showSnackbar("Error rol: ${e.message}") }
             }
 
         db.collection("classes").document(classId).get()
-            .addOnSuccessListener { d -> classItem = d.toObject(ClassItem::class.java) }
+            .addOnSuccessListener { d ->
+                val ci = d.toObject(ClassItem::class.java)
+                classItem = ci
+                selectedProfessorId = ci?.professorId
+            }
             .addOnFailureListener { e ->
-                scope.launch { snack.showSnackbar("Error al cargar clase: ${e.message}") }
+                scope.launch { snack.showSnackbar("Error clase: ${e.message}") }
             }
             .addOnCompleteListener { loading = false }
     }
 
-    // --------- Cargar nombres de alumnos ----------
+    // ---------- Cargar nombres de alumnos ----------
     LaunchedEffect(classItem) {
         val ids = classItem?.assignedStudents ?: emptyList()
         if (ids.isEmpty()) {
@@ -124,14 +141,14 @@ fun ClassDetailScreen(
         }
     }
 
-    // --------- Escuchar notas ----------
+    // ---------- Escuchar calificaciones ----------
     LaunchedEffect(classId) {
         db.collection("classes").document(classId)
             .collection("grades")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
                 if (err != null) {
-                    scope.launch { snack.showSnackbar("Error al cargar notas: ${err.message}") }
+                    scope.launch { snack.showSnackbar("Error notas: ${err.message}") }
                     return@addSnapshotListener
                 }
                 grades = snap?.documents?.map { d ->
@@ -149,60 +166,56 @@ fun ClassDetailScreen(
             }
     }
 
-    // --------- Escuchar reseñas ----------
-    LaunchedEffect(classId) {
-        db.collection("classes").document(classId)
-            .collection("reviews")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snap, err ->
-                if (err != null) {
-                    scope.launch { snack.showSnackbar("Error al cargar reseñas: ${err.message}") }
-                    return@addSnapshotListener
-                }
-                reviews = snap?.documents?.map { d ->
-                    ReviewItem(
-                        id = d.id,
-                        userId = d.getString("userId") ?: "",
-                        userName = d.getString("userName") ?: "",
-                        rating = (d.getLong("rating") ?: 5L).toInt(),
-                        comment = d.getString("comment") ?: "",
-                        createdAt = d.getTimestamp("createdAt")
-                    )
-                } ?: emptyList()
-            }
+    // ---------- Lista de profesores (solo admin) ----------
+    LaunchedEffect(role) {
+        if (role != "admin") return@LaunchedEffect
+
+        try {
+            val snap = db.collection("users")
+                .whereEqualTo("role", "profesor")
+                .get()
+                .await()
+
+            professors = snap.documents.map { d ->
+                val pid = d.id
+                val name = d.getString("name")
+                    ?: d.getString("email")
+                    ?: pid
+                pid to name
+            }.sortedBy { it.second.lowercase() }
+
+        } catch (e: Exception) {
+            scope.launch { snack.showSnackbar("Error cargando profesores: ${e.message}") }
+        }
     }
 
+    // ---------- Reglas de permisos ----------
     val isAdmin = role == "admin"
-    val isProfessorOwner = classItem?.professorId == uid
-    val canManage = isAdmin || isProfessorOwner
+    val isProfessor = role == "profesor"
     val isStudent = role == "estudiante"
+
+    // Solo PROFESOR puede gestionar notas
+    val canManageGrades = isProfessor
 
     val visibleGrades = remember(grades, isStudent, uid) {
         if (isStudent) grades.filter { it.studentId == uid } else grades
     }
 
-    // --------- Progreso académico ----------
     fun recomputeProgressFor(studentId: String) {
         val gs = grades.filter { it.studentId == studentId }
         val avg = if (gs.isNotEmpty()) gs.map { it.score }.average() else 0.0
-        val status = if (avg >= 70.0) "aprobado" else "en curso"
+        val passed = avg >= 70.0
         val docId = "${classId}_$studentId"
-
         val data = mapOf(
             "classId" to classId,
-            "classTitle" to (classItem?.title ?: "Clase sin título"),
-            "userId" to studentId,
-            "score" to avg,
-            "status" to status,
+            "studentId" to studentId,
+            "average" to avg,
+            "passed" to passed,
             "updatedAt" to Timestamp.now()
         )
-
-        db.collection("progress")
-            .document(docId)
-            .set(data, SetOptions.merge())
+        db.collection("progress").document(docId).set(data, SetOptions.merge())
     }
 
-    // --------- Guardar nota ----------
     fun saveGrade(studentId: String, studentName: String, score: Double, comment: String) {
         val ref = db.collection("classes").document(classId).collection("grades")
         val now = Timestamp.now()
@@ -220,7 +233,7 @@ fun ClassDetailScreen(
             ref.add(data)
                 .addOnSuccessListener {
                     recomputeProgressFor(studentId)
-                    scope.launch { snack.showSnackbar("Nota registrada correctamente") }
+                    scope.launch { snack.showSnackbar("Nota registrada") }
                 }
                 .addOnFailureListener { e ->
                     scope.launch { snack.showSnackbar("Error al guardar: ${e.message}") }
@@ -238,7 +251,7 @@ fun ClassDetailScreen(
                 )
             ).addOnSuccessListener {
                 recomputeProgressFor(studentId)
-                scope.launch { snack.showSnackbar("Nota actualizada correctamente") }
+                scope.launch { snack.showSnackbar("Nota actualizada") }
             }.addOnFailureListener { e ->
                 scope.launch { snack.showSnackbar("Error al actualizar: ${e.message}") }
             }
@@ -247,7 +260,6 @@ fun ClassDetailScreen(
         showAddEdit = false
     }
 
-    // --------- Eliminar nota ----------
     fun deleteGrade(item: GradeItem) {
         db.collection("classes").document(classId)
             .collection("grades").document(item.id)
@@ -261,79 +273,20 @@ fun ClassDetailScreen(
             }
     }
 
-    // --------- Agregar clase al carrito ----------
-    fun addToCart() {
-        if (uid.isBlank()) {
-            scope.launch { snack.showSnackbar("Debes iniciar sesión para usar el carrito.") }
-            return
-        }
-        val c = classItem ?: return
-        val userCartRef = db.collection("users").document(uid).collection("cart")
-        val now = Timestamp.now()
+    // Guardar profesor asignado (solo admin)
+    fun saveProfessorAssignment() {
+        val profId = selectedProfessorId ?: return
+        if (profId.isBlank()) return
 
-        val price = c.price
-
-        val data = mapOf(
-            "classId" to classId,
-            "classTitle" to c.title,
-            "price" to price,
-            "imageUrl" to c.imageUrl,
-            "createdAt" to now
-        )
-
-        userCartRef.document(classId)
-            .set(data)
+        db.collection("classes").document(classId)
+            .update("professorId", profId)
             .addOnSuccessListener {
-                scope.launch { snack.showSnackbar("Clase agregada al carrito.") }
+                classItem = classItem?.copy(professorId = profId)
+                scope.launch { snack.showSnackbar("Profesor asignado correctamente.") }
             }
             .addOnFailureListener { e ->
-                scope.launch { snack.showSnackbar("Error al agregar al carrito: ${e.message}") }
+                scope.launch { snack.showSnackbar("Error al asignar profesor: ${e.message}") }
             }
-    }
-
-    // --------- Guardar reseña ----------
-    fun saveReview() {
-        reviewError = null
-        val rating = myRatingText.toIntOrNull()
-        if (rating == null || rating !in 1..5) {
-            reviewError = "La calificación debe ser un número entre 1 y 5."
-            return
-        }
-        if (myComment.isBlank()) {
-            reviewError = "Escribe un comentario."
-            return
-        }
-
-        val usersRef = db.collection("users").document(uid)
-        val now = Timestamp.now()
-
-        usersRef.get()
-            .addOnSuccessListener { u ->
-                val name = u.getString("name") ?: u.getString("email") ?: "Usuario"
-                val ref = db.collection("classes").document(classId)
-                    .collection("reviews")
-
-                val data = mapOf(
-                    "userId" to uid,
-                    "userName" to name,
-                    "rating" to rating,
-                    "comment" to myComment.trim(),
-                    "createdAt" to now
-                )
-
-                ref.add(data)
-                    .addOnSuccessListener {
-                        myComment = ""
-                        myRatingText = "5"
-                        reviewError = null
-                        scope.launch { snack.showSnackbar("Reseña enviada.") }
-                    }
-                    .addOnFailureListener { e ->
-                        reviewError = "Error al enviar reseña: ${e.message}"
-                    }
-            }
-            .addOnFailureListener { e ->
-                reviewError = "Error al obtener datos de usuario: ${e.message}" }
     }
 
     Scaffold(
@@ -349,7 +302,8 @@ fun ClassDetailScreen(
         },
         snackbarHost = { SnackbarHost(snack) },
         floatingActionButton = {
-            if (canManage) {
+            // Solo PROFESOR ve el FAB para agregar notas
+            if (canManageGrades) {
                 FloatingActionButton(onClick = { editing = null; showAddEdit = true }) {
                     Icon(Icons.Filled.Grade, contentDescription = "Agregar nota")
                 }
@@ -362,7 +316,9 @@ fun ClassDetailScreen(
                     .fillMaxSize()
                     .padding(pad),
                 contentAlignment = Alignment.Center
-            ) { CircularProgressIndicator() }
+            ) {
+                CircularProgressIndicator()
+            }
             return@Scaffold
         }
 
@@ -373,19 +329,63 @@ fun ClassDetailScreen(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Cupos (stock)
-            val availableSeats = classItem?.availableSeats?.toInt()
-            if (availableSeats != null) {
-                Text("Cupos disponibles: $availableSeats")
-            } else {
-                Text("Cupos disponibles: ilimitados")
-            }
+            // -------- Bloque de asignación de profesor (ADMIN) --------
+            if (isAdmin) {
+                Text(
+                    text = "Profesor asignado",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
-            if (role == "estudiante" || role == "apoderado") {
-                Button(onClick = { addToCart() }) {
-                    Text("Agregar al carrito")
+                val currentName: String = professors.firstOrNull {
+                    it.first == selectedProfessorId
+                }?.second
+                    ?: if (selectedProfessorId.isNullOrBlank()) "Sin profesor" else selectedProfessorId!!
+
+                var expanded by remember { mutableStateOf(false) }
+
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = currentName,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Profesor") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        professors.forEach { (id, name) ->
+                            DropdownMenuItem(
+                                text = { Text(name) },
+                                onClick = {
+                                    selectedProfessorId = id
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
                 }
+
+                Spacer(Modifier.height(8.dp))
+
+                Button(
+                    onClick = { saveProfessorAssignment() },
+                    enabled = !selectedProfessorId.isNullOrBlank()
+                ) {
+                    Text("Guardar profesor")
+                }
+
+                Divider()
             }
+            // ----------------------------------------------------------
 
             if (isStudent) {
                 val mine = visibleGrades
@@ -398,7 +398,7 @@ fun ClassDetailScreen(
                     Spacer(Modifier.width(10.dp))
                     AssistChip(
                         onClick = {},
-                        label = { Text(if (avg >= 70) "Aprobado" else "En curso") }
+                        label = { Text(if (avg >= 70) "Aprobado" else "En progreso") }
                     )
                 }
             }
@@ -406,26 +406,25 @@ fun ClassDetailScreen(
             Text("Calificaciones", style = MaterialTheme.typography.titleMedium)
 
             if (visibleGrades.isEmpty()) {
-                Text(if (isStudent) "Aún no tienes calificaciones." else "Sin calificaciones registradas.")
+                Text(if (isStudent) "Aún no tienes calificaciones." else "Sin calificaciones.")
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.heightIn(max = 220.dp)
-                ) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(visibleGrades, key = { it.id }) { g ->
                         ElevatedCard(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(12.dp)) {
                                 Text(
-                                    text = if (isStudent) {
+                                    text = if (isStudent)
                                         "Tu nota: ${g.score}"
-                                    } else {
-                                        "${g.studentName} — ${g.score}"
-                                    },
+                                    else
+                                        "${g.studentName} — ${g.score}",
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 if (g.comment.isNotBlank()) {
                                     Spacer(Modifier.height(4.dp))
-                                    Text(g.comment, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        g.comment,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
                                 }
                                 Spacer(Modifier.height(6.dp))
                                 Row(
@@ -433,76 +432,29 @@ fun ClassDetailScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
-                                        "Actualizado: " +
-                                                (g.updatedAt?.toDate()?.toString() ?: "-"),
+                                        "Actualizado: " + (g.updatedAt?.toDate()?.toString() ?: "-"),
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Spacer(Modifier.weight(1f))
-                                    if (canManage) {
-                                        IconButton(onClick = { editing = g; showAddEdit = true }) {
+                                    // Solo profesor puede editar / borrar
+                                    if (canManageGrades) {
+                                        IconButton(onClick = {
+                                            editing = g
+                                            showAddEdit = true
+                                        }) {
                                             Icon(Icons.Filled.Edit, contentDescription = "Editar")
                                         }
                                         IconButton(onClick = { deleteGrade(g) }) {
-                                            Icon(Icons.Filled.Delete, contentDescription = "Eliminar")
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = "Eliminar"
+                                            )
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                }
-            }
-
-            Divider()
-
-            Text("Reseñas de la clase", style = MaterialTheme.typography.titleMedium)
-
-            if (reviews.isEmpty()) {
-                Text("Aún no hay reseñas.")
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.heightIn(max = 220.dp)
-                ) {
-                    items(reviews, key = { it.id }) { r ->
-                        ElevatedCard(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text("${r.userName} — ${r.rating}★")
-                                if (r.comment.isNotBlank()) {
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(r.comment)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (role == "estudiante" || role == "apoderado") {
-                Spacer(Modifier.height(8.dp))
-                Text("Escribe tu reseña", style = MaterialTheme.typography.titleSmall)
-                OutlinedTextField(
-                    value = myRatingText,
-                    onValueChange = { myRatingText = it },
-                    label = { Text("Calificación (1 a 5)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = myComment,
-                    onValueChange = { myComment = it },
-                    label = { Text("Comentario") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (reviewError != null) {
-                    Text(reviewError!!, color = MaterialTheme.colorScheme.error)
-                }
-                Button(
-                    onClick = { saveReview() },
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("Enviar reseña")
                 }
             }
         }
@@ -530,9 +482,13 @@ private fun AddEditGradeDialog(
     onSubmit: (studentId: String, score: Double, comment: String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val pairs = remember(assignedNames) { assignedNames.entries.sortedBy { it.value.lowercase() } }
+    val pairs = remember(assignedNames) {
+        assignedNames.entries.sortedBy { it.value.lowercase() }
+    }
 
-    var studentId by remember { mutableStateOf(editing?.studentId ?: pairs.firstOrNull()?.key.orEmpty()) }
+    var studentId by remember {
+        mutableStateOf(editing?.studentId ?: pairs.firstOrNull()?.key.orEmpty())
+    }
     var scoreText by remember { mutableStateOf(editing?.score?.toString() ?: "") }
     var comment by remember { mutableStateOf(editing?.comment ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -550,13 +506,11 @@ private fun AddEditGradeDialog(
                 error = null
                 val sc = scoreText.toDoubleOrNull()
                 if (studentId.isBlank() || sc == null) {
-                    error = "Selecciona un alumno y una nota válida."
+                    error = "Selecciona alumno y una nota válida."
                     return@TextButton
                 }
                 onSubmit(studentId, sc, comment.trim())
-            }) {
-                Text(if (editing == null) "Guardar" else "Actualizar")
-            }
+            }) { Text(if (editing == null) "Guardar" else "Actualizar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
         title = { Text(if (editing == null) "Registrar nota" else "Editar nota") },
@@ -571,7 +525,9 @@ private fun AddEditGradeDialog(
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Alumno") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded)
+                        },
                         modifier = Modifier
                             .menuAnchor()
                             .fillMaxWidth()

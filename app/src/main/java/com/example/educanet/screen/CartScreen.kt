@@ -15,6 +15,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -65,7 +66,10 @@ fun CartScreen(
                     CartItem(
                         id = d.id,
                         classId = d.getString("classId") ?: "",
-                        classTitle = d.getString("classTitle") ?: "Clase sin título",
+                        // 👇 tomamos primero classTitle, si no viene, usamos title
+                        classTitle = d.getString("classTitle")
+                            ?: d.getString("title")
+                            ?: "Clase sin título",
                         price = d.getDouble("price") ?: 0.0,
                         imageUrl = d.getString("imageUrl") ?: "",
                         createdAt = d.getTimestamp("createdAt")
@@ -189,25 +193,40 @@ fun CartScreen(
     }
 }
 
+/**
+ * Procesa el carrito:
+ * - Descuenta cupos en la clase
+ * - Agrega el alumno a assignedStudents
+ * - Registra la clase en /users/{uid}/myClasses
+ * - Vacía el carrito
+ */
 suspend fun checkoutCart(
     db: FirebaseFirestore,
     uid: String,
     items: List<CartItem>
 ) {
-    if (items.isEmpty()) return
+    if (uid.isBlank() || items.isEmpty()) return
 
-    val cartRef = db.collection("users").document(uid).collection("cart")
+    val userDoc = db.collection("users").document(uid)
+    val cartRef = userDoc.collection("cart")
+    val myClassesRef = userDoc.collection("myClasses")
 
     for (item in items) {
+        if (item.classId.isBlank()) continue
+
         val classRef = db.collection("classes").document(item.classId)
         val snap = classRef.get().await()
-
         if (!snap.exists()) continue
 
         val seats = snap.getLong("availableSeats")?.toInt()
+        val description = snap.getString("description") ?: ""
+        val imageUrl = snap.getString("imageUrl") ?: item.imageUrl
+        val title = item.classTitle
 
+        // Descontar cupos y asignar alumno
         if (seats != null) {
             if (seats <= 0) {
+                // sin cupos → solo seguimos con la siguiente
                 continue
             }
             classRef.update(
@@ -222,8 +241,23 @@ suspend fun checkoutCart(
                 FieldValue.arrayUnion(uid)
             ).await()
         }
+
+        // Registrar en /users/{uid}/myClasses/{classId}
+        val myData = mapOf(
+            "classId" to item.classId,
+            "title" to title,
+            "description" to description,
+            "imageUrl" to imageUrl,
+            "price" to item.price,
+            "createdAt" to Timestamp.now()
+        )
+
+        myClassesRef.document(item.classId)
+            .set(myData, SetOptions.merge())
+            .await()
     }
 
+    // Vaciar carrito
     val cartSnap = cartRef.get().await()
     cartSnap.documents.forEach { d ->
         d.reference.delete()

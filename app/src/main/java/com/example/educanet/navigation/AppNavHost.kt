@@ -14,14 +14,20 @@ fun AppNavHost() {
 
     NavHost(
         navController = navController,
-        startDestination = "home"
+        startDestination = "home"      // si quieres partir en login puedes cambiar a "login"
     ) {
+        // HOME
         composable("home") {
             HomeScreen(
-                onLogout = { /* tu lógica de logout */ },
+                onLogout = {
+                    // aquí si quieres puedes limpiar sesión y navegar a login
+                    // navController.navigate("login") {
+                    //     popUpTo("home") { inclusive = true }
+                    // }
+                },
                 onNewClass = { navController.navigate("createClass") },
                 onOpenClass = { id -> navController.navigate("classDetail/$id") },
-                onOpenResources = { /* navegar a recursos si tienes */ },
+                onOpenResources = { /* navController.navigate("resources") si la creas */ },
                 onOpenProgress = { studentId ->
                     navController.navigate("progress/$studentId")
                 },
@@ -30,10 +36,14 @@ fun AppNavHost() {
                 },
                 onOpenCart = {
                     navController.navigate("cart")
+                },
+                onOpenMyClasses = {                      // 👈 FALTABA ESTE
+                    navController.navigate("myClasses")
                 }
             )
         }
 
+        // DETALLE DE CLASE
         composable(
             route = "classDetail/{classId}",
             arguments = listOf(navArgument("classId") { type = NavType.StringType })
@@ -45,6 +55,7 @@ fun AppNavHost() {
             )
         }
 
+        // PROGRESO
         composable(
             route = "progress/{studentId}",
             arguments = listOf(navArgument("studentId") { type = NavType.StringType })
@@ -56,12 +67,14 @@ fun AppNavHost() {
             )
         }
 
+        // AJUSTES
         composable("settings") {
             SettingsScreen(
                 onBack = { navController.popBackStack() }
             )
         }
 
+        // CARRITO
         composable("cart") {
             CartScreen(
                 onBack = { navController.popBackStack() },
@@ -69,7 +82,22 @@ fun AppNavHost() {
             )
         }
 
-        // Si tienes pantalla de creación de clase:
-        // composable("createClass") { CreateClassScreen(... ) }
+        // CREAR CLASE
+        composable("createClass") {
+            CreateClassScreen(
+                onCancel = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
+            )
+        }
+
+        // MIS CLASES (clases pagadas del alumno)
+        composable("myClasses") {
+            MyClassesScreen(
+                onBack = { navController.popBackStack() },
+                onOpenClass = { classId ->
+                    navController.navigate("classDetail/$classId")
+                }
+            )
+        }
     }
 }

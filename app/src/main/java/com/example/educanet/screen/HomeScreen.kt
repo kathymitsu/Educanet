@@ -1,9 +1,7 @@
 package com.example.educanet.screen
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import com.example.educanet.ui.ui.StorageImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,24 +9,40 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.educanet.data.UserPrefs
-import com.example.educanet.item.ClassItem
-import com.example.educanet.ui.ui.StorageImage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.launch
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.ui.platform.LocalContext
+import com.example.educanet.data.UserPrefs
+import com.google.firebase.Timestamp
+
+// Modelo local de clase para el Home
+data class ClassItem(
+    val title: String = "",
+    val description: String = "",
+    val videoLink: String = "",
+    val professorId: String = "",
+    val assignedStudents: List<String> = emptyList(),
+    val createdBy: String = "",
+    val createdAt: Timestamp? = null,
+    val isActive: Boolean = true,
+    val imageUrl: String = "",
+    val price: Double = 0.0,
+    val availableSeats: Int = 0
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,7 +53,8 @@ fun HomeScreen(
     onOpenResources: () -> Unit,
     onOpenProgress: (String) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenCart: () -> Unit
+    onOpenCart: () -> Unit,
+    onOpenMyClasses: () -> Unit = {}
 ) {
     val ctx = LocalContext.current
     val db = remember { FirebaseFirestore.getInstance() }
@@ -49,26 +64,26 @@ fun HomeScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Perfil desde DataStore
     val profile by UserPrefs.profileFlow(ctx).collectAsState(initial = UserPrefs.Profile())
     var name by remember { mutableStateOf(profile.name) }
     var role by remember { mutableStateOf(profile.role.ifBlank { null }) }
+
+    val isStudent = role == "estudiante"
+    val isProfessor = role == "profesor"
 
     var loading by remember { mutableStateOf(true) }
     var classes by remember { mutableStateOf(listOf<Pair<String, ClassItem>>()) }
     var errorText by remember { mutableStateOf<String?>(null) }
 
-    // Suscripción a topic
+    // 🔔 Suscripción básica a topic
     LaunchedEffect(Unit) {
         runCatching { FirebaseMessaging.getInstance().subscribeToTopic("classes").await() }
     }
 
-    // Cargar nombre / rol si no están en DataStore
+    // 👤 Si no hay rol/nombre en DataStore, los trae de Firestore y los guarda local
     LaunchedEffect(uid) {
-        if (uid.isBlank()) {
-            name = ""
-            role = null
-            return@LaunchedEffect
-        }
+        if (uid.isBlank()) return@LaunchedEffect
         if (profile.role.isBlank() || profile.name.isBlank()) {
             runCatching {
                 val snap = db.collection("users").document(uid).get().await()
@@ -84,92 +99,123 @@ fun HomeScreen(
         }
     }
 
-    // Cargar clases según rol (con fix para uid vacío)
+    // 📚 Cargar clases según rol (y escuchar cambios)
     LaunchedEffect(role, uid) {
-        if (uid.isBlank()) {
-            loading = false
-            classes = emptyList()
-            errorText = null
-            return@LaunchedEffect
-        }
-        if (role == null) {
-            loading = false
-            return@LaunchedEffect
-        }
-
+        if (role == null || uid.isBlank()) return@LaunchedEffect
         loading = true
         errorText = null
 
         val base = db.collection("classes")
 
-        fun attachListener(q: com.google.firebase.firestore.Query) {
+        val attachListener: (com.google.firebase.firestore.Query) -> Unit = { q ->
             q.addSnapshotListener { snap, err ->
                 if (err != null) {
                     loading = false
                     classes = emptyList()
                     errorText = when ((err as? FirebaseFirestoreException)?.code) {
                         FirebaseFirestoreException.Code.PERMISSION_DENIED ->
-                            "PERMISSION_DENIED: revisa reglas de Firestore para /classes."
+                            "PERMISSION_DENIED: Revisa reglas de Firestore para /classes."
                         else -> "Error cargando clases: ${err.message}"
                     }
                     return@addSnapshotListener
                 }
 
                 val list = snap?.documents?.map { d ->
-                    val ci = d.toObject(ClassItem::class.java) ?: ClassItem()
-                    d.id to ci.copy(id = d.id)
+                    d.id to ClassItem(
+                        title = d.getString("title") ?: "",
+                        description = d.getString("description") ?: "",
+                        videoLink = d.getString("videoLink") ?: "",
+                        professorId = d.getString("professorId") ?: "",
+                        assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
+                            ?: emptyList(),
+                        createdBy = d.getString("createdBy") ?: "",
+                        createdAt = d.getTimestamp("createdAt"),
+                        isActive = d.getBoolean("isActive") ?: true,
+                        imageUrl = d.getString("imageUrl") ?: "",
+                        price = d.getDouble("price") ?: 0.0,
+                        availableSeats = (d.getLong("availableSeats") ?: 0L).toInt()
+                    )
                 } ?: emptyList()
 
-                classes = list.sortedByDescending {
-                    it.second.createdAt?.toDate()?.time ?: 0L
-                }
+                classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
                 loading = false
                 errorText = null
             }
         }
 
         when (role) {
-            "admin" -> attachListener(base)
-            "profesor" -> attachListener(base.whereEqualTo("professorId", uid))
-            else -> attachListener(base.whereArrayContains("assignedStudents", uid))
+            "admin" -> attachListener(base)                       // ve todas
+            "profesor" -> attachListener(base.whereEqualTo("isActive", true))
+            else -> attachListener(base.whereEqualTo("isActive", true))
         }
     }
 
+    // 🛒 función para que SOLO el alumno agregue al carro
+    fun addToCart(classId: String, item: ClassItem) {
+        if (!isStudent || uid.isBlank()) return
+
+        val cartRef = db.collection("users")
+            .document(uid)
+            .collection("cart")
+            .document(classId)
+
+        db.runTransaction { tr ->
+            val snap = tr.get(cartRef)
+            if (snap.exists()) {
+                val currentQty = (snap.getLong("quantity") ?: 1L).toInt()
+                tr.update(cartRef, "quantity", currentQty + 1)
+            } else {
+                val data = mapOf(
+                    "classId" to classId,
+                    "classTitle" to item.title,
+                    "price" to item.price,
+                    "imageUrl" to item.imageUrl,
+                    "quantity" to 1,
+                    "createdAt" to Timestamp.now()
+                )
+                tr.set(cartRef, data)
+            }
+        }.addOnSuccessListener {
+            scope.launch { snackbar.showSnackbar("Clase agregada al carrito") }
+        }.addOnFailureListener { e ->
+            scope.launch { snackbar.showSnackbar("Error al agregar al carrito: ${e.message}") }
+        }
+    }
+
+    // 🧭 UI
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Educanet") },
                 actions = {
-                    IconButton(onClick = onOpenCart) {
-                        Icon(Icons.Filled.ShoppingCart, contentDescription = "Carrito")
+                    if (isStudent) {
+                        IconButton(onClick = onOpenCart) {
+                            Icon(
+                                imageVector = Icons.Default.Add, // cámbialo por ícono de carrito si quieres
+                                contentDescription = "Carrito"
+                            )
+                        }
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Ajustes")
+                        Icon(Icons.Default.Settings, contentDescription = "Ajustes")
                     }
-                    IconButton(
-                        onClick = {
-                            // 1) Cerrar sesión Firebase
-                            FirebaseAuth.getInstance().signOut()
-                            // 2) Limpiar perfil local
-                            scope.launch { UserPrefs.clearProfile(ctx) }
-                            // 3) Navegar a login (lo maneja el NavHost)
-                            onLogout()
-                        }
-                    ) {
-                        Icon(Icons.Filled.Logout, contentDescription = "Cerrar sesión")
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.Default.Logout, contentDescription = "Salir")
                     }
                 }
             )
         },
         floatingActionButton = {
-            if (role == "admin") {
+            // FAB de crear clase SOLO para admin/profesor
+            if (role == "admin" || role == "profesor") {
                 FloatingActionButton(onClick = onNewClass) {
-                    Icon(Icons.Filled.Add, contentDescription = "Nueva clase")
+                    Icon(Icons.Default.Add, contentDescription = "Nueva clase")
                 }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { pad ->
+
         Column(
             modifier = Modifier
                 .padding(pad)
@@ -177,7 +223,6 @@ fun HomeScreen(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = if (name.isBlank()) "Bienvenido/a" else "Hola, $name",
@@ -185,14 +230,10 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 )
                 role?.let {
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(it.replaceFirstChar { c -> c.uppercase() }) }
-                    )
+                    AssistChip(onClick = {}, label = { Text(it.replaceFirstChar { c -> c.uppercase() }) })
                 }
             }
 
-            // Botones rápidos
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -208,18 +249,27 @@ fun HomeScreen(
                 ) { Text("Progreso") }
             }
 
-            Divider()
-            Text("Clases", style = MaterialTheme.typography.titleMedium)
-
-            AnimatedVisibility(
-                visible = loading,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+            // si quieres mostrar "Mis clases" solo al alumno:
+            if (isStudent) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
+                    ElevatedButton(
+                        onClick = onOpenMyClasses,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Mis clases") }
+                }
+            }
+
+            HorizontalDivider()
+            Text(
+                if (isStudent) "Clases disponibles" else "Clases",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            AnimatedVisibility(visible = loading, enter = fadeIn(), exit = fadeOut()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             }
@@ -227,20 +277,26 @@ fun HomeScreen(
             Crossfade(targetState = Pair(loading, classes)) { state ->
                 val (isLoading, list) = state
                 if (!isLoading) {
-                    when {
-                        errorText != null -> Text(
-                            errorText!!,
-                            color = MaterialTheme.colorScheme.error
-                        )
 
-                        list.isEmpty() -> Text("No hay clases para tu rol.")
+                    // alumno: solo activas con cupos; otros roles: la lista tal cual
+                    val visibleList =
+                        if (isStudent) list.filter { it.second.availableSeats > 0 && it.second.isActive }
+                        else list
+
+                    when {
+                        errorText != null ->
+                            Text(errorText!!, color = MaterialTheme.colorScheme.error)
+
+                        visibleList.isEmpty() ->
+                            Text(
+                                if (isStudent) "No hay clases con cupos disponibles."
+                                else "No hay clases para tu rol."
+                            )
 
                         else -> {
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                items(list.size) { i ->
-                                    val (id, c) = list[i]
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(visibleList.size) { i ->
+                                    val (id, c) = visibleList[i]
                                     ElevatedCard(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -276,33 +332,42 @@ fun HomeScreen(
                                             }
 
                                             Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                "Precio: $${"%.0f".format(c.price)}",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                "Cupos disponibles: ${c.availableSeats}",
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
 
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
+                                            // profesor puede ver qué UID está asignado
+                                            if (isProfessor) {
+                                                Spacer(Modifier.height(4.dp))
                                                 Text(
-                                                    text = "$${"%.0f".format(c.price)}",
-                                                    style = MaterialTheme.typography.bodyMedium
-                                                )
-
-                                                val seats = c.availableSeats?.toInt()
-                                                Text(
-                                                    text = when {
-                                                        seats == null -> "Cupos: ∞"
-                                                        seats <= 0 -> "Sin cupos"
-                                                        else -> "Cupos: $seats"
-                                                    },
+                                                    "Profesor asignado: ${c.professorId.ifBlank { "Sin asignar" }}",
                                                     style = MaterialTheme.typography.bodySmall
                                                 )
                                             }
 
                                             if (!c.isActive) {
                                                 Spacer(Modifier.height(4.dp))
-                                                AssistChip(
-                                                    onClick = {},
-                                                    label = { Text("Inactiva") }
-                                                )
+                                                AssistChip(onClick = {}, label = { Text("Inactiva") })
+                                            }
+
+                                            if (isStudent) {
+                                                Spacer(Modifier.height(8.dp))
+                                                Button(
+                                                    onClick = { addToCart(id, c) },
+                                                    enabled = c.availableSeats > 0
+                                                ) {
+                                                    Text(
+                                                        if (c.availableSeats > 0)
+                                                            "Agregar al carrito"
+                                                        else
+                                                            "Sin cupos"
+                                                    )
+                                                }
                                             }
                                         }
                                     }

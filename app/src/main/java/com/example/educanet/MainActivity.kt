@@ -17,12 +17,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.educanet.screen.CartScreen
 import com.example.educanet.screen.ClassDetailScreen
+import com.example.educanet.screen.CreateClassScreen
 import com.example.educanet.screen.HomeScreen
 import com.example.educanet.screen.LoginScreen
+import com.example.educanet.screen.MyClassesScreen   // 👈 IMPORTANTE
 import com.example.educanet.screen.ProgressScreen
 import com.example.educanet.screen.SettingsScreen
-// importa CreateClassScreen si la tienes
-// import com.example.educanet.screen.CreateClassScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,7 +85,7 @@ fun EducanetNav(
                     navController.navigate("classDetail/$classId")
                 },
                 onOpenResources = {
-                    // si tienes pantalla de recursos, navega aquí
+                    // Si más adelante haces pantalla de recursos:
                     // navController.navigate("resources")
                 },
                 onOpenProgress = { studentId ->
@@ -96,6 +96,9 @@ fun EducanetNav(
                 },
                 onOpenCart = {
                     navController.navigate("cart")
+                },
+                onOpenMyClasses = {                      // 👈 NUEVO
+                    navController.navigate("myClasses")
                 }
             )
         }
@@ -139,15 +142,22 @@ fun EducanetNav(
             )
         }
 
-        // CREAR CLASE (si la tienes)
+        // ✅ CREAR CLASE
         composable(route = "createClass") {
-            // Descomenta si tienes CreateClassScreen
-            /*
             CreateClassScreen(
                 onCancel = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
+                onSaved  = { navController.popBackStack() }
             )
-            */
+        }
+
+        // ✅ MIS CLASES (alumno)
+        composable(route = "myClasses") {
+            MyClassesScreen(
+                onBack = { navController.popBackStack() },
+                onOpenClass = { classId ->
+                    navController.navigate("classDetail/$classId")
+                }
+            )
         }
     }
 }
