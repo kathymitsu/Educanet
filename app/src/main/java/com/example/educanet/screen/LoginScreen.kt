@@ -14,7 +14,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
-    onLoginSuccess: () -> Unit
+    onLoginSuccess: () -> Unit,
+    onRegisterClick: () -> Unit
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val scope = rememberCoroutineScope()
@@ -102,6 +103,10 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(if (loading) "Ingresando..." else "Iniciar sesión")
+                }
+
+                TextButton(onClick = onRegisterClick) {
+                    Text("¿No tienes cuenta? Regístrate")
                 }
             }
         }

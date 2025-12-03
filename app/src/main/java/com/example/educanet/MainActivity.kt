@@ -20,8 +20,9 @@ import com.example.educanet.screen.ClassDetailScreen
 import com.example.educanet.screen.CreateClassScreen
 import com.example.educanet.screen.HomeScreen
 import com.example.educanet.screen.LoginScreen
-import com.example.educanet.screen.MyClassesScreen   // 👈 IMPORTANTE
+import com.example.educanet.screen.MyClassesScreen
 import com.example.educanet.screen.ProgressScreen
+import com.example.educanet.screen.RegisterScreen
 import com.example.educanet.screen.SettingsScreen
 
 class MainActivity : ComponentActivity() {
@@ -63,6 +64,20 @@ fun EducanetNav(
         composable(route = "login") {
             LoginScreen(
                 onLoginSuccess = {
+                    navController.navigate("home") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                },
+                onRegisterClick = {
+                    navController.navigate("register")
+                }
+            )
+        }
+
+        // REGISTER
+        composable(route = "register") {
+            RegisterScreen(
+                onRegisterSuccess = {
                     navController.navigate("home") {
                         popUpTo("login") { inclusive = true }
                     }
