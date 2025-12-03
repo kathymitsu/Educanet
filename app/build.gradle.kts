@@ -41,8 +41,8 @@ android {
 
 dependencies {
     // --- Compose / Material 3 (tu setup actual) ---
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.12")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.12")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -79,8 +79,9 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
+
     // 🔥 CORRECCIÓN CRUCIAL: Añadir soporte para Coroutines y Tareas de Play Services.
     // Esto es clave para que las operaciones asíncronas de Firebase como putFile()
     // y la gestión de la URI en el hilo de la UI no fallen silenciosamente.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutin")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }
