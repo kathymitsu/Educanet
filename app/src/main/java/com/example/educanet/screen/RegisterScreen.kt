@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
@@ -27,7 +28,12 @@ fun RegisterScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
 
-    val minChars = 6 // 👉 mínimo de caracteres
+    var nameError by remember { mutableStateOf<String?>(null) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var confirmPasswordError by remember { mutableStateOf<String?>(null) }
+
+    val minChars = 6
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) }
@@ -42,80 +48,109 @@ fun RegisterScreen(
                 modifier = Modifier
                     .padding(24.dp)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("Crear cuenta", style = MaterialTheme.typography.headlineMedium)
+                Spacer(modifier = Modifier.height(16.dp))
 
+                // --- CAMPO NOMBRE ---
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = it; nameError = null },
                     label = { Text("Nombre") },
                     singleLine = true,
+                    isError = nameError != null,
                     modifier = Modifier.fillMaxWidth()
                 )
+                nameError?.let {
+                    Text(text = it, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                }
 
+                // --- CAMPO CORREO ---
                 OutlinedTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = { email = it; emailError = null },
                     label = { Text("Correo") },
                     singleLine = true,
+                    isError = emailError != null,
                     modifier = Modifier.fillMaxWidth()
                 )
+                emailError?.let {
+                    Text(text = it, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                }
 
+                // --- CAMPO CONTRASEÑA ---
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { password = it; passwordError = null },
                     label = { Text("Contraseña") },
                     singleLine = true,
+                    isError = passwordError != null,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
                 )
+                passwordError?.let {
+                    Text(text = it, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                }
 
+                // --- CAMPO CONFIRMAR CONTRASEÑA ---
                 OutlinedTextField(
                     value = confirmPassword,
-                    onValueChange = { confirmPassword = it },
+                    onValueChange = { confirmPassword = it; confirmPasswordError = null },
                     label = { Text("Confirmar contraseña") },
                     singleLine = true,
+                    isError = confirmPasswordError != null,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
                 )
+                confirmPasswordError?.let {
+                    Text(text = it, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = {
-                        //CAMPOS VACÍOS
-                        if (name.isBlank() || email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
-                            scope.launch {
-                                snackbar.showSnackbar("Por favor no dejes campos vacíos.")
-                            }
-                            return@Button
+                        var isValid = true
+
+                        // 1. Validar nombre
+                        if (name.isBlank()) {
+                            nameError = "El nombre es obligatorio."
+                            isValid = false
                         }
 
-                        //DOMINIO DEL CORREO
-                        if (!email.endsWith("@educanet.cl", ignoreCase = true)) {
-                            scope.launch {
-                                snackbar.showSnackbar("El correo debe tener el dominio @educanet.cl.")
-                            }
-                            return@Button
+                        // 2. Validar correo
+                        if (email.isBlank()) {
+                            emailError = "El correo es obligatorio."
+                            isValid = false
+                        } else if (!email.endsWith("@educanet.cl", ignoreCase = true)) {
+                            emailError = "El correo debe tener el dominio @educanet.cl."
+                            isValid = false
+                        } else if (email.length < minChars) {
+                            emailError = "El correo debe tener al menos $minChars caracteres."
+                            isValid = false
                         }
 
-                        //CONTRASEÑAS NO COINCIDEN
-                        if (password != confirmPassword) {
-                            scope.launch {
-                                snackbar.showSnackbar("Las contraseñas no coinciden.")
-                            }
-                            return@Button
+                        // 3. Validar contraseña
+                        if (password.isBlank()) {
+                            passwordError = "La contraseña es obligatoria."
+                            isValid = false
+                        } else if (password.length < minChars) {
+                            passwordError = "La contraseña debe tener al menos $minChars caracteres."
+                            isValid = false
                         }
 
-                        //MÍNIMO DE CARACTERES
-                        if (email.length < minChars || password.length < minChars) {
-                            scope.launch {
-                                snackbar.showSnackbar(
-                                    "El correo y la contraseña deben tener al menos $minChars caracteres."
-                                )
-                            }
-                            return@Button
+                        // 4. Validar confirmación de contraseña
+                        if (confirmPassword.isBlank()) {
+                            confirmPasswordError = "Confirma tu contraseña."
+                            isValid = false
+                        } else if (password != confirmPassword) {
+                            confirmPasswordError = "Las contraseñas no coinciden."
+                            isValid = false
                         }
+
+                        if (!isValid) return@Button
 
                         loading = true
                         auth.createUserWithEmailAndPassword(email, password)
@@ -144,9 +179,7 @@ fun RegisterScreen(
                             .addOnFailureListener { e ->
                                 loading = false
                                 scope.launch {
-                                    snackbar.showSnackbar(
-                                        e.message ?: "Error al crear cuenta"
-                                    )
+                                    snackbar.showSnackbar(e.message ?: "Error al crear cuenta")
                                 }
                             }
                     },
