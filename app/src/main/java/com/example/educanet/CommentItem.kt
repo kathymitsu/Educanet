@@ -1,4 +1,4 @@
-package com.example.educanet.item
+package com.example.educanet
 
 import com.google.firebase.Timestamp
 

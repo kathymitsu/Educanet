@@ -1,5 +1,6 @@
-package com.example.educanet.ui.ui
+package com.example.educanet.ui.theme
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
