@@ -1,4 +1,6 @@
-package com.example.educanet
+package com.example.educanet.item
+
+import com.google.firebase.Timestamp
 
 data class GradeItem(
     val id: String = "",
@@ -6,7 +8,7 @@ data class GradeItem(
     val studentName: String = "",
     val score: Double = 0.0,
     val comment: String = "",
-    val createdAt: com.google.firebase.Timestamp? = null,
-    val updatedAt: com.google.firebase.Timestamp? = null,
+    val createdAt: Timestamp? = null,
+    val updatedAt: Timestamp? = null,
     val updatedBy: String = ""
 )

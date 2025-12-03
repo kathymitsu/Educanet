@@ -1,4 +1,4 @@
-package com.example.educanet.ui.theme
+package com.example.educanet.ui.ui
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
