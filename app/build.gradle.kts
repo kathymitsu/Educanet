@@ -82,5 +82,5 @@ dependencies {
     // 🔥 CORRECCIÓN CRUCIAL: Añadir soporte para Coroutines y Tareas de Play Services.
     // Esto es clave para que las operaciones asíncronas de Firebase como putFile()
     // y la gestión de la URI en el hilo de la UI no fallen silenciosamente.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutin")
 }
