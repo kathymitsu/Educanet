@@ -24,6 +24,7 @@ fun RegisterScreen(
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
 
     val minChars = 6 // 👉 mínimo de caracteres
@@ -71,12 +72,28 @@ fun RegisterScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    label = { Text("Confirmar contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Button(
                     onClick = {
                         // 👉 Validaciones
-                        if (name.isBlank() || email.isBlank() || password.isBlank()) {
+                        if (name.isBlank() || email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
                             scope.launch {
                                 snackbar.showSnackbar("Por favor no dejes campos vacíos.")
+                            }
+                            return@Button
+                        }
+
+                        if (password != confirmPassword) {
+                            scope.launch {
+                                snackbar.showSnackbar("Las contraseñas no coinciden.")
                             }
                             return@Button
                         }
