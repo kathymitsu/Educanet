@@ -1,13 +1,13 @@
-package com.example.educanet.viewmodel
+package com.example.educanet
 
 import androidx.lifecycle.ViewModel
-import com.example.educanet.Comment
-import com.google.firebase.Timestamp
+import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 class CommentsViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
@@ -39,7 +39,7 @@ class CommentsViewModel : ViewModel() {
             "text" to text.trim(),
             "userId" to uid,
             "userName" to userName,
-            "createdAt" to Timestamp.now()
+            "createdAt" to com.google.firebase.Timestamp.now()
         )
         db.collection("classes").document(classId)
             .collection("comments").add(data)
