@@ -41,8 +41,8 @@ android {
 
 dependencies {
     // --- Compose / Material 3 (tu setup actual) ---
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.12")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.12")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
