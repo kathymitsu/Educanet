@@ -1,10 +1,12 @@
-package com.example.educanet
+package com.example.educanet.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.educanet.SettingsDataStore
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -18,7 +20,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val ds = SettingsDataStore(app)
 
     val ui: StateFlow<SettingsUi> =
-        kotlinx.coroutines.flow.combine(
+        combine(
             ds.rememberSession, ds.darkMode, ds.avatarUri
         ) { r, d, a -> SettingsUi(r, d, a) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUi())
