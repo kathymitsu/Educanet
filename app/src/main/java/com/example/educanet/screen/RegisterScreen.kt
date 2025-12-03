@@ -83,7 +83,7 @@ fun RegisterScreen(
 
                 Button(
                     onClick = {
-                        // 👉 Validaciones
+                        //CAMPOS VACÍOS
                         if (name.isBlank() || email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
                             scope.launch {
                                 snackbar.showSnackbar("Por favor no dejes campos vacíos.")
@@ -91,6 +91,15 @@ fun RegisterScreen(
                             return@Button
                         }
 
+                        //DOMINIO DEL CORREO
+                        if (!email.endsWith("@educanet.cl", ignoreCase = true)) {
+                            scope.launch {
+                                snackbar.showSnackbar("El correo debe tener el dominio @educanet.cl.")
+                            }
+                            return@Button
+                        }
+
+                        //CONTRASEÑAS NO COINCIDEN
                         if (password != confirmPassword) {
                             scope.launch {
                                 snackbar.showSnackbar("Las contraseñas no coinciden.")
@@ -98,6 +107,7 @@ fun RegisterScreen(
                             return@Button
                         }
 
+                        //MÍNIMO DE CARACTERES
                         if (email.length < minChars || password.length < minChars) {
                             scope.launch {
                                 snackbar.showSnackbar(
