@@ -7,7 +7,15 @@ object AuthValidators {
     fun validateEmail(email: String): FieldError? {
         if (email.isBlank()) return FieldError("El correo es obligatorio.")
         val ok = android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
-        return if (!ok) FieldError("Formato de correo inválido.") else null
+        if (!ok) return FieldError("Formato de correo inválido.")
+
+        val validDomains = listOf("admineducanet.cl", "educanet.cl", "profesoreducanet.cl", "apoderadoeducanet.cl")
+        val domain = email.substringAfter('@')
+        if (domain !in validDomains) {
+            return FieldError("El dominio del correo no es válido.")
+        }
+
+        return null
     }
 
     fun validatePassword(pass: String): FieldError? {

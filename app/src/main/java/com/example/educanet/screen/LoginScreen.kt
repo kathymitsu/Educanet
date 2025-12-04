@@ -7,7 +7,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.example.educanet.domain.isValidEmail
+import com.example.educanet.util.AuthValidators
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import kotlinx.coroutines.launch
@@ -25,6 +25,9 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbar) }
@@ -46,66 +49,66 @@ fun LoginScreen(
 
                 OutlinedTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = { 
+                        email = it
+                        emailError = AuthValidators.validateEmail(it)?.message
+                    },
                     label = { Text("Correo") },
                     singleLine = true,
+                    isError = emailError != null,
+                    supportingText = { emailError?.let { Text(it) } },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { 
+                        password = it 
+                        passwordError = AuthValidators.validatePassword(it)?.message
+                    },
                     label = { Text("Contraseña") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
+                    isError = passwordError != null,
+                    supportingText = { passwordError?.let { Text(it) } },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Button(
                     onClick = {
-                        if (!isValidEmail(email)) {
-                            scope.launch {
-                                snackbar.showSnackbar("El formato del correo no es válido o el dominio no está permitido.")
-                            }
-                            return@Button
-                        }
+                        emailError = AuthValidators.validateEmail(email)?.message
+                        passwordError = AuthValidators.validatePassword(password)?.message
 
-                        // 💬 Mensaje cuando hay campos vacíos
-                        if (email.isBlank() || password.isBlank()) {
-                            scope.launch {
-                                snackbar.showSnackbar("Por favor no dejes campos vacíos.")
-                            }
-                            return@Button
-                        }
-
-                        loading = true
-                        auth.signInWithEmailAndPassword(email, password)
-                            .addOnSuccessListener {
-                                loading = false
-                                onLoginSuccess()
-                            }
-                            .addOnFailureListener { e ->
-                                loading = false
-
-                                val fbEx = e as? FirebaseAuthException
-                                val userMsg = when (fbEx?.errorCode) {
-                                    "ERROR_INVALID_EMAIL" ->
-                                        "El formato del correo no es válido."
-                                    "ERROR_USER_NOT_FOUND" ->
-                                        "No existe una cuenta registrada con este correo."
-                                    "ERROR_WRONG_PASSWORD",
-                                    "ERROR_INVALID_CREDENTIAL" ->
-                                        "Correo o contraseña incorrectos. Intenta nuevamente."
-                                    "ERROR_USER_DISABLED" ->
-                                        "Esta cuenta ha sido deshabilitada."
-                                    else ->
-                                        "No se pudo iniciar sesión. Revisa tus datos e inténtalo nuevamente."
+                        if (emailError == null && passwordError == null) {
+                            loading = true
+                            auth.signInWithEmailAndPassword(email, password)
+                                .addOnSuccessListener {
+                                    loading = false
+                                    onLoginSuccess()
                                 }
+                                .addOnFailureListener { e ->
+                                    loading = false
 
-                                scope.launch {
-                                    snackbar.showSnackbar(userMsg)
+                                    val fbEx = e as? FirebaseAuthException
+                                    val userMsg = when (fbEx?.errorCode) {
+                                        "ERROR_INVALID_EMAIL" ->
+                                            "El formato del correo no es válido."
+                                        "ERROR_USER_NOT_FOUND" ->
+                                            "No existe una cuenta registrada con este correo."
+                                        "ERROR_WRONG_PASSWORD",
+                                        "ERROR_INVALID_CREDENTIAL" ->
+                                            "Correo o contraseña incorrectos. Intenta nuevamente."
+                                        "ERROR_USER_DISABLED" ->
+                                            "Esta cuenta ha sido deshabilitada."
+                                        else ->
+                                            "No se pudo iniciar sesión. Revisa tus datos e inténtalo nuevamente."
+                                    }
+
+                                    scope.launch {
+                                        snackbar.showSnackbar(userMsg)
+                                    }
                                 }
-                            }
+                        }
                     },
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth()

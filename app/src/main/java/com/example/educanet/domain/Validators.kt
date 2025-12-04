@@ -6,7 +6,7 @@ fun isValidEmail(email: String): Boolean {
     if (parts.size != 2) return false
     val domain = parts[1].lowercase()
     return when (domain) {
-        "admineducanet.cl", "profesoreducanet.cl", "apeducanet.cl", "educanet.cl" -> true
+        "admineducanet.cl", "profesoreducanet.cl", "apoderadoeducanet.cl", "educanet.cl" -> true
         else -> false
     }
 }
@@ -18,7 +18,7 @@ fun getRoleFromEmail(email: String): Role? {
     return when (parts[1].lowercase()) {
         "admineducanet.cl" -> Role.ADMIN
         "profesoreducanet.cl" -> Role.PROFESOR
-        "apeducanet.cl" -> Role.APODERADO
+        "apoderadoeducanet.cl" -> Role.APODERADO
         "educanet.cl" -> Role.ESTUDIANTE
         else -> null
     }
