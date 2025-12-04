@@ -51,7 +51,7 @@ fun RegisterScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Crear cuenta", style = MaterialTheme.typography.headlineMedium)
+                Text("Crear cuenta de Estudiante", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // --- CAMPO NOMBRE ---
@@ -120,15 +120,9 @@ fun RegisterScreen(
                             isValid = false
                         }
 
-                        // 2. Validar correo
-                        if (email.isBlank()) {
-                            emailError = "El correo es obligatorio."
-                            isValid = false
-                        } else if (!email.endsWith("@educanet.cl", ignoreCase = true)) {
-                            emailError = "El correo debe tener el dominio @educanet.cl."
-                            isValid = false
-                        } else if (email.length < minChars) {
-                            emailError = "El correo debe tener al menos $minChars caracteres."
+                        // 2. Validar correo de estudiante
+                        if (!email.endsWith("@educanet.cl", ignoreCase = true)) {
+                            emailError = "El correo de estudiante debe tener el dominio @educanet.cl."
                             isValid = false
                         }
 

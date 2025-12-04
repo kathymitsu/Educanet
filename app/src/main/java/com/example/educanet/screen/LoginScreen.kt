@@ -7,6 +7,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.educanet.domain.isValidEmail
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import kotlinx.coroutines.launch
@@ -62,6 +63,13 @@ fun LoginScreen(
 
                 Button(
                     onClick = {
+                        if (!isValidEmail(email)) {
+                            scope.launch {
+                                snackbar.showSnackbar("El formato del correo no es válido o el dominio no está permitido.")
+                            }
+                            return@Button
+                        }
+
                         // 💬 Mensaje cuando hay campos vacíos
                         if (email.isBlank() || password.isBlank()) {
                             scope.launch {
