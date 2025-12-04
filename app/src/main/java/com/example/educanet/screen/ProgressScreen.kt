@@ -48,14 +48,14 @@ fun ProgressScreen(
 
         db.collection("progress")
             .whereEqualTo("userId", effectiveUserId)
-            .orderBy("updatedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, e ->
                 if (e != null) {
                     error = e.message
                     loading = false
                     return@addSnapshotListener
                 }
-                items = snap?.toObjects(ProgressItem::class.java) ?: emptyList()
+                val unsortedItems = snap?.toObjects(ProgressItem::class.java) ?: emptyList()
+                items = unsortedItems.sortedByDescending { it.updatedAt?.toDate()?.time ?: 0L }
                 loading = false
             }
     }
