@@ -7,7 +7,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.example.educanet.domain.isValidEmail
 import com.example.educanet.util.AuthValidators
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
@@ -32,12 +31,7 @@ fun LoginScreen(
 
     fun validateAndSetEmail(value: String) {
         email = value
-        emailError = if (isValidEmail(value)) {
-            null
-        } else {
-            if (value.isBlank()) "El correo es obligatorio."
-            else "El formato o dominio del correo es inválido."
-        }
+        emailError = AuthValidators.validateEmail(value)?.message
     }
 
     Scaffold(

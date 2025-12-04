@@ -34,7 +34,8 @@ data class ClassItem(
     val videoLink: String?,
     val imageUrl: String?,
     val professorEmail: String?,
-    val assignedStudents: List<String> = emptyList()
+    val assignedStudents: List<String> = emptyList(),
+    val resources: List<Map<String, String>> = emptyList()
 )
 
 data class Grade(
@@ -185,4 +186,26 @@ class FakeEducanetBackend {
     // ---------------------------------
     fun adminCanCreateClassWithAssignments(): Boolean =
         classes.any { it.professorEmail != null && it.assignedStudents.isNotEmpty() }
+
+    // ---------------------------------
+    // NEW: Admin can see student progress
+    // ---------------------------------
+    fun adminCanSeeStudentProgress(adminEmail: String): Boolean {
+        val admin = users.find { it.email == adminEmail && it.role == Role.ADMIN }
+        return admin != null
+    }
+
+    // ---------------------------------
+    // NEW: Admin can get student list
+    // ---------------------------------
+    fun getStudents(): List<User> {
+        return users.filter { it.role == Role.ESTUDIANTE }
+    }
+
+    // ---------------------------------
+    // NEW: Admin can upload resources to a class
+    // ---------------------------------
+    fun adminCanUploadResourcesToClass(): Boolean {
+        return classes.any { it.resources.isNotEmpty() }
+    }
 }

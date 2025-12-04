@@ -1,10 +1,19 @@
-// app/src/main/java/com/example/educanet/screen/CreateClassScreenAdmin.kt
 package com.example.educanet.screen
 
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -12,12 +21,38 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.google.firebase.Timestamp
@@ -33,11 +68,13 @@ import java.util.UUID
 @Composable
 fun CreateClassScreenAdmin(
     onBack: () -> Unit,
-    onSaved: () -> Unit
+    onSaved: () -> Unit,
+    onManageStudents: () -> Unit
 ) {
     val db = remember { FirebaseFirestore.getInstance() }
     val auth = remember { FirebaseAuth.getInstance() }
     val myUid = auth.currentUser?.uid ?: ""
+    val context = LocalContext.current
 
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -47,6 +84,25 @@ fun CreateClassScreenAdmin(
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? -> imageUri = uri }
+    )
+
+    var resources by remember { mutableStateOf<List<Pair<Uri, String>>>(emptyList()) }
+    val resourcePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            uri?.let {
+                if (resources.any { it.first == uri }) return@let
+                var name = ""
+                context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    cursor.moveToFirst()
+                    name = cursor.getString(nameIndex)
+                }
+                if (name.isNotBlank()) {
+                    resources = resources + (it to name)
+                }
+            }
+        }
     )
 
     // profesores
@@ -96,15 +152,21 @@ fun CreateClassScreenAdmin(
         if (localUri == null) return ""
         val fileName = "class_images/${UUID.randomUUID()}.jpg"
         val ref = Firebase.storage.reference.child(fileName)
-
-        // Añade contentType para que el visor lo sirva bien (no es obligatorio, pero ayuda)
         val metadata = com.google.firebase.storage.StorageMetadata.Builder()
             .setContentType("image/jpeg")
             .build()
-
-        // Subir y obtener URL de descarga (la parte que suele fallar si no se hace así)
         ref.putFile(localUri, metadata).await()
         return ref.downloadUrl.await().toString()
+    }
+
+    suspend fun uploadResourcesAndGetUrls(resourceList: List<Pair<Uri, String>>): List<Map<String, String>> {
+        return resourceList.map { (uri, name) ->
+            val fileName = "class_resources/${UUID.randomUUID()}"
+            val ref = Firebase.storage.reference.child(fileName)
+            ref.putFile(uri).await()
+            val url = ref.downloadUrl.await().toString()
+            mapOf("name" to name, "url" to url)
+        }
     }
 
     fun save() {
@@ -117,7 +179,8 @@ fun CreateClassScreenAdmin(
         saving = true
         scope.launch {
             try {
-                val imageUrl = uploadCoverAndGetUrl(imageUri) // "" si no hay imagen
+                val imageUrl = uploadCoverAndGetUrl(imageUri)
+                val uploadedResources = uploadResourcesAndGetUrls(resources)
 
                 val data = mapOf(
                     "title" to title.trim(),
@@ -125,7 +188,8 @@ fun CreateClassScreenAdmin(
                     "videoLink" to videoLink.trim(),
                     "professorId" to selectedProfessor!!,
                     "assignedStudents" to selectedStudents.toList(),
-                    "imageUrl" to imageUrl,               // <<--- URL COMPLETA https
+                    "imageUrl" to imageUrl,
+                    "resources" to uploadedResources,
                     "createdBy" to myUid,
                     "createdAt" to Timestamp.now(),
                     "isActive" to true
@@ -149,6 +213,11 @@ fun CreateClassScreenAdmin(
                 title = { Text("Nueva clase (Admin)") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
+                },
+                actions = {
+                    IconButton(onClick = onManageStudents) {
+                        Icon(Icons.Filled.People, contentDescription = "Manage Students")
+                    }
                 }
             )
         },
@@ -225,9 +294,34 @@ fun CreateClassScreenAdmin(
             }
 
             Spacer(Modifier.height(16.dp))
+            OutlinedButton(
+                onClick = { resourcePickerLauncher.launch("*/*") },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Adjuntar Recurso") }
+
+            if (resources.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("Recursos adjuntos", style = MaterialTheme.typography.titleMedium)
+                resources.forEach { (uri, name) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(name, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { resources = resources.filter { it.first != uri } }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Quitar recurso")
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
             Text("Estudiantes asignados", style = MaterialTheme.typography.titleMedium)
             LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(200.dp), // Height is needed for nested scroll
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
                 items(students, key = { it.first }) { (uid, name) ->

@@ -9,7 +9,7 @@ object AuthValidators {
         val ok = android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
         if (!ok) return FieldError("Formato de correo inválido.")
 
-        val validDomains = listOf("admineducanet.cl", "educanet.cl", "profesoreducanet.cl", "apoderadoeducanet.cl")
+        val validDomains = listOf("admineducanet.cl", "educanet.cl", "profesoreducanet.cl", "apoderadoeducanet.cl", "profesor.cl")
         val domain = email.substringAfter('@')
         if (domain !in validDomains) {
             return FieldError("El dominio del correo no es válido.")
