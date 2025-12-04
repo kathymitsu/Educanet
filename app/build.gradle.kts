@@ -40,28 +40,38 @@ android {
 }
 
 dependencies {
-    // --- Compose / Material 3 (tu setup actual) ---
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+    // --- Core & Coroutines ---
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+    // --- Compose ---
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material3) // From BOM
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.compose.foundation)
     implementation("androidx.navigation:navigation-compose:2.8.3")
+    implementation("androidx.compose.animation:animation:1.7.4")
+
+    // --- Firebase ---
+    implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-storage-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
+
+    // --- Utility Libraries ---
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
     implementation("com.airbnb.android:lottie:6.3.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("androidx.compose.animation:animation:1.7.4")
     implementation("io.coil-kt:coil-compose:2.6.0")
-    implementation(libs.androidx.compose.foundation)
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation(libs.androidx.material3) // Ya estaba aquí, movida.
 
-
+    // --- Testing ---
     testImplementation(libs.junit)
     testImplementation("androidx.test:core:1.5.0")
     testImplementation("androidx.test.ext:junit:1.1.5")
@@ -72,16 +82,4 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    // --- Firebase ---
-    implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-storage-ktx")
-    implementation("com.google.firebase:firebase-messaging-ktx")
-
-    // 🔥 CORRECCIÓN CRUCIAL: Añadir soporte para Coroutines y Tareas de Play Services.
-    // Esto es clave para que las operaciones asíncronas de Firebase como putFile()
-    // y la gestión de la URI en el hilo de la UI no fallen silenciosamente.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }
