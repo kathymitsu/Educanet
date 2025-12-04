@@ -7,6 +7,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.educanet.domain.isValidEmail
 import com.example.educanet.util.AuthValidators
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
@@ -29,6 +30,16 @@ fun LoginScreen(
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
 
+    fun validateAndSetEmail(value: String) {
+        email = value
+        emailError = if (isValidEmail(value)) {
+            null
+        } else {
+            if (value.isBlank()) "El correo es obligatorio."
+            else "El formato o dominio del correo es inválido."
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbar) }
     ) { pad ->
@@ -49,10 +60,7 @@ fun LoginScreen(
 
                 OutlinedTextField(
                     value = email,
-                    onValueChange = { 
-                        email = it
-                        emailError = AuthValidators.validateEmail(it)?.message
-                    },
+                    onValueChange = { validateAndSetEmail(it) },
                     label = { Text("Correo") },
                     singleLine = true,
                     isError = emailError != null,
@@ -76,7 +84,8 @@ fun LoginScreen(
 
                 Button(
                     onClick = {
-                        emailError = AuthValidators.validateEmail(email)?.message
+                        // Re-validar por si el usuario no ha modificado el campo
+                        validateAndSetEmail(email)
                         passwordError = AuthValidators.validatePassword(password)?.message
 
                         if (emailError == null && passwordError == null) {
