@@ -95,7 +95,9 @@ fun AppNavHost() {
             MyClassesScreen(
                 onBack = { navController.popBackStack() },
                 onOpenClass = { classId ->
-                    navController.navigate("classDetail/$classId")
+                    navController.navigate("classDetail/$classId")        },
+                onOpenProgress = { studentId ->      //
+                    navController.navigate("progress/$studentId")
                 }
             )
         }

@@ -1,5 +1,7 @@
 package com.example.educanet.screen
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -26,6 +29,7 @@ fun ResourcesScreen(
     val db = remember { FirebaseFirestore.getInstance() }
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
+    val ctx = LocalContext.current
 
     var items by remember { mutableStateOf<List<ResourceItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -95,15 +99,15 @@ fun ResourcesScreen(
                 else -> {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(items, key = { it.id }) { res ->
+                    ) {                        items(items, key = { it.id }) { res ->
                             ResourceCard(res) { url ->
-                                // si quieres abrir el link con un Intent:
-                                // val ctx = LocalContext.current
-                                // val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                // ctx.startActivity(intent)
-                                scope.launch {
-                                    snack.showSnackbar("Abrir: $url")
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    ctx.startActivity(intent)
+                                } catch (e: Exception) {
+                                    scope.launch {
+                                        snack.showSnackbar("No se puede abrir el enlace: ${e.message}")
+                                    }
                                 }
                             }
                         }

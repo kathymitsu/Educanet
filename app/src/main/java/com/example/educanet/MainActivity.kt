@@ -24,6 +24,7 @@ import com.example.educanet.screen.MyClassesScreen
 import com.example.educanet.screen.ProgressScreen
 import com.example.educanet.screen.RegisterScreen
 import com.example.educanet.screen.SettingsScreen
+import com.example.educanet.screen.ResourcesScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,8 +101,7 @@ fun EducanetNav(
                     navController.navigate("classDetail/$classId")
                 },
                 onOpenResources = {
-                    // Si más adelante haces pantalla de recursos:
-                    // navController.navigate("resources")
+                     navController.navigate("resources")
                 },
                 onOpenProgress = { studentId ->
                     navController.navigate("progress/$studentId")
@@ -171,7 +171,17 @@ fun EducanetNav(
                 onBack = { navController.popBackStack() },
                 onOpenClass = { classId ->
                     navController.navigate("classDetail/$classId")
+                },
+                onOpenProgress = { studentId ->
+                    navController.navigate("progress/$studentId")
                 }
+            )
+        }
+
+        // RECURSOS
+        composable(route = "resources") {
+            ResourcesScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }

@@ -30,7 +30,8 @@ data class MyClassItem(
 @Composable
 fun MyClassesScreen(
     onBack: () -> Unit,
-    onOpenClass: (String) -> Unit
+    onOpenClass: (String) -> Unit,
+    onOpenProgress: (String) -> Unit //navegar a progreso
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val db = remember { FirebaseFirestore.getInstance() }
@@ -166,6 +167,15 @@ fun MyClassesScreen(
                                         text = "Precio pagado: $${"%.0f".format(item.price)}",
                                         style = MaterialTheme.typography.bodySmall
                                     )
+
+                                    // Botón para ver progreso
+                                    Spacer(Modifier.height(8.dp))
+                                    Button(
+                                        onClick = { onOpenProgress(uid) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Ver progreso")
+                                    }
                                 }
                             }
                         }
