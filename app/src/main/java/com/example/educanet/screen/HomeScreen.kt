@@ -278,9 +278,13 @@ fun HomeScreen(
                 val (isLoading, list) = state
                 if (!isLoading) {
 
-                    // alumno: solo activas con cupos; otros roles: la lista tal cual
+                    // alumno: solo activas con cupos y que no esté inscrito; otros roles: la lista tal cual
                     val visibleList =
-                        if (isStudent) list.filter { it.second.availableSeats > 0 && it.second.isActive }
+                        if (isStudent) list.filter {
+                            it.second.availableSeats > 0 &&
+                                    it.second.isActive &&
+                                    !it.second.assignedStudents.contains(uid)
+                        }
                         else list
 
                     when {

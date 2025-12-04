@@ -42,10 +42,12 @@ fun CartScreen(
     val snack = remember { SnackbarHostState() }
 
     var items by remember { mutableStateOf<List<CartItem>>(emptyList()) }
+    var enrolledClassIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var loading by remember { mutableStateOf(true) }
     var processing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    // Carga los items del carrito
     LaunchedEffect(uid) {
         if (uid.isBlank()) {
             error = "Usuario no autenticado."
@@ -66,10 +68,7 @@ fun CartScreen(
                     CartItem(
                         id = d.id,
                         classId = d.getString("classId") ?: "",
-                        // 👇 tomamos primero classTitle, si no viene, usamos title
-                        classTitle = d.getString("classTitle")
-                            ?: d.getString("title")
-                            ?: "Clase sin título",
+                        classTitle = d.getString("classTitle") ?: d.getString("title") ?: "Clase sin título",
                         price = d.getDouble("price") ?: 0.0,
                         imageUrl = d.getString("imageUrl") ?: "",
                         createdAt = d.getTimestamp("createdAt")
@@ -81,8 +80,26 @@ fun CartScreen(
             }
     }
 
-    val totalPrice = remember(items) {
-        items.sumOf { it.price }
+    // Carga las clases en las que el usuario ya está inscrito
+    LaunchedEffect(uid) {
+        if (uid.isBlank()) return@LaunchedEffect
+        db.collection("users").document(uid).collection("myClasses")
+            .addSnapshotListener { snap, e ->
+                if (e != null) {
+                    scope.launch { snack.showSnackbar("Error al cargar tus clases: ${e.message}") }
+                    return@addSnapshotListener
+                }
+                enrolledClassIds = snap?.documents?.map { it.id }?.toSet() ?: emptySet()
+            }
+    }
+
+    // Filtra el carrito para no mostrar clases ya inscritas
+    val filteredItems = remember(items, enrolledClassIds) {
+        items.filter { it.classId !in enrolledClassIds }
+    }
+
+    val totalPrice = remember(filteredItems) {
+        filteredItems.sumOf { it.price }
     }
 
     Scaffold(
@@ -99,30 +116,23 @@ fun CartScreen(
         snackbarHost = { SnackbarHost(snack) }
     ) { pad ->
         Column(
-            modifier = Modifier
-                .padding(pad)
-                .padding(16.dp)
-                .fillMaxSize(),
+            modifier = Modifier.padding(pad).padding(16.dp).fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             when {
                 loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) { CircularProgressIndicator() }
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
 
                 error != null -> {
                     Text("Error: $error", color = MaterialTheme.colorScheme.error)
                 }
 
-                items.isEmpty() -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Tu carrito está vacío.")
+                filteredItems.isEmpty() -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Tu carrito está vacío o ya estás inscrito en estas clases.")
                     }
                 }
 
@@ -131,7 +141,7 @@ fun CartScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(items, key = { it.id }) { item ->
+                        items(filteredItems, key = { it.id }) { item ->
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(12.dp)) {
                                     Text(
@@ -172,7 +182,7 @@ fun CartScreen(
                             scope.launch {
                                 processing = true
                                 try {
-                                    checkoutCart(db, uid, items)
+                                    checkoutCart(db, uid, filteredItems)
                                     snack.showSnackbar("Inscripción confirmada.")
                                     onCheckoutSuccess()
                                 } catch (e: Exception) {
@@ -183,7 +193,7 @@ fun CartScreen(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !processing
+                        enabled = !processing && filteredItems.isNotEmpty()
                     ) {
                         Text(if (processing) "Procesando..." else "Confirmar inscripción")
                     }
@@ -194,11 +204,10 @@ fun CartScreen(
 }
 
 /**
- * Procesa el carrito:
- * - Descuenta cupos en la clase
- * - Agrega el alumno a assignedStudents
- * - Registra la clase en /users/{uid}/myClasses
- * - Vacía el carrito
+ * Procesa el carrito de forma transaccional y segura:
+ * - Descuenta cupos en la clase y asigna al alumno atómicamente.
+ * - Registra la clase en /users/{uid}/myClasses.
+ * - Vacía los items procesados del carrito.
  */
 suspend fun checkoutCart(
     db: FirebaseFirestore,
@@ -208,58 +217,55 @@ suspend fun checkoutCart(
     if (uid.isBlank() || items.isEmpty()) return
 
     val userDoc = db.collection("users").document(uid)
-    val cartRef = userDoc.collection("cart")
     val myClassesRef = userDoc.collection("myClasses")
 
+    // Procesar cada inscripción en una transacción para asegurar consistencia
     for (item in items) {
         if (item.classId.isBlank()) continue
-
         val classRef = db.collection("classes").document(item.classId)
-        val snap = classRef.get().await()
-        if (!snap.exists()) continue
 
-        val seats = snap.getLong("availableSeats")?.toInt()
-        val description = snap.getString("description") ?: ""
-        val imageUrl = snap.getString("imageUrl") ?: item.imageUrl
-        val title = item.classTitle
+        db.runTransaction { transaction ->
+            val classSnap = transaction.get(classRef)
 
-        // Descontar cupos y asignar alumno
-        if (seats != null) {
-            if (seats <= 0) {
-                // sin cupos → solo seguimos con la siguiente
-                continue
+            // Salvaguarda: no procesar si el usuario ya está inscrito
+            val assignedStudents = classSnap.get("assignedStudents") as? List<*> ?: emptyList<Any>()
+            if (uid in assignedStudents) {
+                return@runTransaction
             }
-            classRef.update(
-                mapOf(
-                    "availableSeats" to seats - 1,
-                    "assignedStudents" to FieldValue.arrayUnion(uid)
-                )
-            ).await()
-        } else {
-            classRef.update(
-                "assignedStudents",
-                FieldValue.arrayUnion(uid)
-            ).await()
+
+            // Verificar y descontar cupo atómicamente
+            val seats = classSnap.getLong("availableSeats")
+            if (seats != null) {
+                if (seats <= 0) {
+                    // Sin cupos, no se puede inscribir
+                    return@runTransaction
+                }
+                transaction.update(classRef, "availableSeats", FieldValue.increment(-1))
+            }
+
+            // Asignar alumno
+            transaction.update(classRef, "assignedStudents", FieldValue.arrayUnion(uid))
+
+            // Registrar en /users/{uid}/myClasses/{classId}
+            val myData = mapOf(
+                "classId" to item.classId,
+                "title" to item.classTitle,
+                "description" to (classSnap.getString("description") ?: ""),
+                "imageUrl" to (classSnap.getString("imageUrl") ?: item.imageUrl),
+                "price" to item.price,
+                "createdAt" to Timestamp.now()
+            )
+            val myClassDoc = myClassesRef.document(item.classId)
+            transaction.set(myClassDoc, myData, SetOptions.merge())
+
+        }.await()
+    }
+
+    // Vaciar solo los items procesados del carrito usando un batch write
+    val cartRef = userDoc.collection("cart")
+    db.runBatch { batch ->
+        items.forEach { item ->
+            batch.delete(cartRef.document(item.id))
         }
-
-        // Registrar en /users/{uid}/myClasses/{classId}
-        val myData = mapOf(
-            "classId" to item.classId,
-            "title" to title,
-            "description" to description,
-            "imageUrl" to imageUrl,
-            "price" to item.price,
-            "createdAt" to Timestamp.now()
-        )
-
-        myClassesRef.document(item.classId)
-            .set(myData, SetOptions.merge())
-            .await()
-    }
-
-    // Vaciar carrito
-    val cartSnap = cartRef.get().await()
-    cartSnap.documents.forEach { d ->
-        d.reference.delete()
-    }
+    }.await()
 }
