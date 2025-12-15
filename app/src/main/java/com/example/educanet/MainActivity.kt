@@ -3,7 +3,6 @@ package com.example.educanet
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -17,7 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.educanet.screen.CartScreen
 import com.example.educanet.screen.ClassDetailScreen
-import com.example.educanet.screen.CreateClassScreen
+import com.example.educanet.screen.ClassEditScreen
 import com.example.educanet.screen.HomeScreen
 import com.example.educanet.screen.LoginScreen
 import com.example.educanet.screen.MyClassesScreen
@@ -42,10 +41,9 @@ fun EducanetApp() {
     MaterialTheme {
         Scaffold(
             modifier = Modifier.fillMaxSize()
-        ) { innerPadding ->
+        ) { 
             EducanetNav(
-                navController = navController,
-                innerPadding = innerPadding
+                navController = navController
             )
         }
     }
@@ -53,8 +51,7 @@ fun EducanetApp() {
 
 @Composable
 fun EducanetNav(
-    navController: NavHostController,
-    innerPadding: PaddingValues
+    navController: NavHostController
 ) {
     NavHost(
         navController = navController,
@@ -112,7 +109,7 @@ fun EducanetNav(
                 onOpenCart = {
                     navController.navigate("cart")
                 },
-                onOpenMyClasses = {                      // 👈 NUEVO
+                onOpenMyClasses = {
                     navController.navigate("myClasses")
                 }
             )
@@ -125,6 +122,19 @@ fun EducanetNav(
         ) { backStackEntry ->
             val classId = backStackEntry.arguments?.getString("classId") ?: ""
             ClassDetailScreen(
+                classId = classId,
+                onBack = { navController.popBackStack() },
+                onEdit = { classIdToEdit -> navController.navigate("editClass/$classIdToEdit") }
+            )
+        }
+        
+        // EDITAR CLASE
+        composable(
+            route = "editClass/{classId}",
+            arguments = listOf(navArgument("classId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val classId = backStackEntry.arguments?.getString("classId")
+            ClassEditScreen(
                 classId = classId,
                 onBack = { navController.popBackStack() }
             )
@@ -159,9 +169,9 @@ fun EducanetNav(
 
         // ✅ CREAR CLASE
         composable(route = "createClass") {
-            CreateClassScreen(
-                onCancel = { navController.popBackStack() },
-                onSaved  = { navController.popBackStack() }
+            ClassEditScreen(
+                classId = null,
+                onBack = { navController.popBackStack() }
             )
         }
 

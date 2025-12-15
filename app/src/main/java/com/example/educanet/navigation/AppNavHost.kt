@@ -1,3 +1,4 @@
+
 package com.example.educanet.navigation
 
 import androidx.compose.runtime.Composable
@@ -25,7 +26,7 @@ fun AppNavHost() {
                     //     popUpTo("home") { inclusive = true }
                     // }
                 },
-                onNewClass = { navController.navigate("createClass") },
+                onNewClass = { navController.navigate("classEdit") },
                 onOpenClass = { id -> navController.navigate("classDetail/$id") },
                 onOpenResources = { /* navController.navigate("resources") si la creas */ },
                 onOpenProgress = { studentId ->
@@ -51,7 +52,9 @@ fun AppNavHost() {
             val classId = backStackEntry.arguments?.getString("classId") ?: ""
             ClassDetailScreen(
                 classId = classId,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onEdit = { id -> navController.navigate("classEdit/$id") } // <-- Añadido para editar
+
             )
         }
 
@@ -82,13 +85,29 @@ fun AppNavHost() {
             )
         }
 
-        // CREAR CLASE
-        composable("createClass") {
-            CreateClassScreen(
-                onCancel = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
+       // CREAR/EDITAR CLASE
+        composable(
+            route = "classEdit?classId={classId}",
+            arguments = listOf(navArgument("classId") {
+                type = NavType.StringType
+                nullable = true
+            })
+        ) {
+            ClassEditScreen(
+                classId = it.arguments?.getString("classId"),
+                onBack = { navController.popBackStack() }
             )
         }
+        composable(
+            route = "classEdit/{classId}",
+            arguments = listOf(navArgument("classId") { type = NavType.StringType })
+        ) {
+            ClassEditScreen(
+                classId = it.arguments?.getString("classId"),
+                onBack = { navController.popBackStack() }
+            )
+        }
+
 
         // MIS CLASES (clases pagadas del alumno)
         composable("myClasses") {

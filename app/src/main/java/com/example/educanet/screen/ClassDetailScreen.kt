@@ -1,3 +1,4 @@
+
 package com.example.educanet.screen
 
 import androidx.compose.foundation.layout.*
@@ -50,7 +51,8 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun ClassDetailScreen(
     classId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onEdit: (String) -> Unit,
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val db = remember { FirebaseFirestore.getInstance() }
@@ -84,16 +86,12 @@ fun ClassDetailScreen(
                 scope.launch { snack.showSnackbar("Error rol: ${e.message}") }
             }
 
-        db.collection("classes").document(classId).get()
-            .addOnSuccessListener { d ->
-                val ci = d.toObject(ClassItem::class.java)
-                classItem = ci
-                selectedProfessorId = ci?.professorId
-            }
-            .addOnFailureListener { e ->
-                scope.launch { snack.showSnackbar("Error clase: ${e.message}") }
-            }
-            .addOnCompleteListener { loading = false }
+        db.collection("classes").document(classId).addSnapshotListener { d, _ ->
+            val ci = d?.toObject(ClassItem::class.java)
+            classItem = ci
+            selectedProfessorId = ci?.professorId
+            loading = false
+        }
     }
 
     // ---------- Cargar nombres de alumnos ----------
@@ -151,18 +149,7 @@ fun ClassDetailScreen(
                     scope.launch { snack.showSnackbar("Error notas: ${err.message}") }
                     return@addSnapshotListener
                 }
-                grades = snap?.documents?.map { d ->
-                    GradeItem(
-                        id = d.id,
-                        studentId = d.getString("studentId") ?: "",
-                        studentName = d.getString("studentName") ?: "",
-                        score = (d.getDouble("score") ?: 0.0),
-                        comment = d.getString("comment") ?: "",
-                        createdAt = d.getTimestamp("createdAt"),
-                        updatedAt = d.getTimestamp("updatedAt"),
-                        updatedBy = d.getString("updatedBy") ?: ""
-                    )
-                } ?: emptyList()
+                grades = snap?.documents?.mapNotNull { it.toObject(GradeItem::class.java) } ?: emptyList()
             }
     }
 
@@ -194,7 +181,7 @@ fun ClassDetailScreen(
     val isProfessor = role == "profesor"
     val isStudent = role == "estudiante"
 
-    // Solo PROFESOR puede gestionar notas
+    val canEditClass = isAdmin || (isProfessor && classItem?.professorId == uid)
     val canManageGrades = isProfessor
 
     val visibleGrades = remember(grades, isStudent, uid) {
@@ -221,14 +208,14 @@ fun ClassDetailScreen(
         val now = Timestamp.now()
 
         if (editing == null) {
-            val data = mapOf(
-                "studentId" to studentId,
-                "studentName" to studentName,
-                "score" to score,
-                "comment" to comment,
-                "createdAt" to now,
-                "updatedAt" to now,
-                "updatedBy" to uid
+            val data = GradeItem(
+                studentId = studentId,
+                studentName = studentName,
+                score = score,
+                comment = comment,
+                createdAt = now,
+                updatedAt = now,
+                updatedBy = uid
             )
             ref.add(data)
                 .addOnSuccessListener {
@@ -296,6 +283,13 @@ fun ClassDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Atrás")
+                    }
+                },
+                actions = {
+                    if (canEditClass) {
+                        IconButton(onClick = { onEdit(classId) }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "Editar")
+                        }
                     }
                 }
             )

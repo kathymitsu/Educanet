@@ -1,3 +1,4 @@
+
 package com.example.educanet.screen
 
 import com.example.educanet.ui.ui.StorageImage
@@ -28,21 +29,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.ui.platform.LocalContext
 import com.example.educanet.data.UserPrefs
 import com.google.firebase.Timestamp
-
-// Modelo local de clase para el Home
-data class ClassItem(
-    val title: String = "",
-    val description: String = "",
-    val videoLink: String = "",
-    val professorId: String = "",
-    val assignedStudents: List<String> = emptyList(),
-    val createdBy: String = "",
-    val createdAt: Timestamp? = null,
-    val isActive: Boolean = true,
-    val imageUrl: String = "",
-    val price: Double = 0.0,
-    val availableSeats: Int = 0
-)
+import com.example.educanet.item.ClassItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,20 +108,7 @@ fun HomeScreen(
                 }
 
                 val list = snap?.documents?.map { d ->
-                    d.id to ClassItem(
-                        title = d.getString("title") ?: "",
-                        description = d.getString("description") ?: "",
-                        videoLink = d.getString("videoLink") ?: "",
-                        professorId = d.getString("professorId") ?: "",
-                        assignedStudents = (d.get("assignedStudents") as? List<*>)?.filterIsInstance<String>()
-                            ?: emptyList(),
-                        createdBy = d.getString("createdBy") ?: "",
-                        createdAt = d.getTimestamp("createdAt"),
-                        isActive = d.getBoolean("isActive") ?: true,
-                        imageUrl = d.getString("imageUrl") ?: "",
-                        price = d.getDouble("price") ?: 0.0,
-                        availableSeats = (d.getLong("availableSeats") ?: 0L).toInt()
-                    )
+                    d.id to (d.toObject(ClassItem::class.java) ?: ClassItem())
                 } ?: emptyList()
 
                 classes = list.sortedByDescending { it.second.createdAt?.toDate()?.time ?: 0L }
@@ -281,7 +255,7 @@ fun HomeScreen(
                     // alumno: solo activas con cupos y que no esté inscrito; otros roles: la lista tal cual
                     val visibleList =
                         if (isStudent) list.filter {
-                            it.second.availableSeats > 0 &&
+                            (it.second.availableSeats ?: 0L) > 0 &&
                                     it.second.isActive &&
                                     !it.second.assignedStudents.contains(uid)
                         }
@@ -304,7 +278,7 @@ fun HomeScreen(
                                     ElevatedCard(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { onOpenClass(id) }
+                                            .clickable(enabled = !isStudent) { onOpenClass(id) }
                                     ) {
                                         Column(Modifier.padding(12.dp)) {
                                             if (c.imageUrl.isNotBlank()) {
@@ -341,7 +315,7 @@ fun HomeScreen(
                                                 style = MaterialTheme.typography.bodyMedium
                                             )
                                             Text(
-                                                "Cupos disponibles: ${c.availableSeats}",
+                                                "Cupos disponibles: ${c.availableSeats ?: 0}",
                                                 style = MaterialTheme.typography.bodySmall
                                             )
 
@@ -363,10 +337,10 @@ fun HomeScreen(
                                                 Spacer(Modifier.height(8.dp))
                                                 Button(
                                                     onClick = { addToCart(id, c) },
-                                                    enabled = c.availableSeats > 0
+                                                    enabled = (c.availableSeats ?: 0L) > 0
                                                 ) {
                                                     Text(
-                                                        if (c.availableSeats > 0)
+                                                        if ((c.availableSeats ?: 0L) > 0)
                                                             "Agregar al carrito"
                                                         else
                                                             "Sin cupos"
