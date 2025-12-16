@@ -108,8 +108,6 @@ fun HomeScreen(
         if (profile.role.isBlank() || profile.name.isBlank()) {
             runCatching {
                 val snap = db.collection("users").document(uid).get().await()
-
-
                 val nm = snap.getString("name") ?: (snap.getString("email") ?: "")
                 val rl = snap.getString("role") ?: "estudiante"
                 name = nm
@@ -190,8 +188,8 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            // FAB de crear clase SOLO para admin/profesor
-            if (role == "admin" || role == "profesor") {
+            // FAB de crear clase para profesor o admin
+            if (role == "profesor" || role == "admin") {
                 FloatingActionButton(onClick = onNewClass) {
                     Icon(Icons.Default.Add, contentDescription = "Nueva clase")
                 }
@@ -313,59 +311,29 @@ fun HomeScreen(
                                             if (c.description.isNotBlank()) {
                                                 Text(
                                                     c.description,
+                                                    style = MaterialTheme.typography.bodySmall,
                                                     maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    style = MaterialTheme.typography.bodyMedium
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
-
+                                            
                                             Spacer(Modifier.height(8.dp))
-
-                                            // Precio y botón de añadir al carrito
+                                            
                                             Row(
+                                                modifier = Modifier.fillMaxWidth(),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                modifier = Modifier.fillMaxWidth()
+                                                horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
                                                 val format = NumberFormat.getCurrencyInstance(Locale("es", "MX"))
                                                 Text(
                                                     text = format.format(c.price),
-                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.Bold
                                                 )
-
-                                                ElevatedButton(onClick = {
-                                                    if (uid.isBlank()) {
-                                                        scope.launch {
-                                                            snackbar.showSnackbar("Debes iniciar sesión para añadir al carrito.")
-                                                        }
-                                                        return@ElevatedButton
-                                                    }
-
-                                                    val cartItem = hashMapOf(
-                                                        "classId" to id,
-                                                        "classTitle" to c.title,
-                                                        "price" to c.price,
-                                                        "imageUrl" to c.imageUrl,
-                                                        "createdAt" to Timestamp.now()
-                                                    )
-
-                                                    db.collection("users").document(uid)
-                                                        .collection("cart").document(id)
-                                                        .set(cartItem)
-                                                        .addOnSuccessListener {
-                                                            scope.launch {
-                                                                snackbar.showSnackbar("Clase añadida al carrito.")
-                                                            }
-                                                        }
-                                                        .addOnFailureListener { e ->
-                                                            scope.launch {
-                                                                snackbar.showSnackbar("Error: ${e.message}")
-                                                            }
-                                                        }
-                                                }) {
-                                                    Text("Añadir al carrito")
-                                                }
+                                                Text(
+                                                    "Cupos disponibles: ${c.availableSeats ?: 0}",
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
                                             }
                                         }
                                     }

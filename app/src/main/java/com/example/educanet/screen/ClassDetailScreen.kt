@@ -51,7 +51,9 @@ import com.example.educanet.item.ClassItem
 import com.example.educanet.item.GradeItem
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.launch
@@ -297,19 +299,36 @@ fun ClassDetailScreen(
                 } else {
                     Button(
                         onClick = {
-                            val cartItem = hashMapOf(
-                                "classId" to classId,
-                                "classTitle" to classItem?.title,
-                                "price" to classItem?.price,
-                                "imageUrl" to classItem?.imageUrl,
-                                "createdAt" to Timestamp.now()
-                            )
-                            db.collection("users").document(uid)
-                                .collection("cart").document(classId)
-                                .set(cartItem)
-                                .addOnSuccessListener {
+                            scope.launch {
+                                try {
+                                    val classRef = db.collection("classes").document(classId)
+                                    val cartRef = db.collection("users").document(uid).collection("cart").document(classId)
+
+                                    db.runTransaction { transaction ->
+                                        val snapshot = transaction.get(classRef)
+                                        val currentSeats = snapshot.getLong("availableSeats") ?: 0
+                                        if (currentSeats > 0) {
+                                            transaction.update(classRef, "availableSeats", FieldValue.increment(-1))
+
+                                            val cartItem = hashMapOf(
+                                                "classId" to classId,
+                                                "classTitle" to classItem?.title,
+                                                "description" to classItem?.description,
+                                                "price" to classItem?.price,
+                                                "imageUrl" to classItem?.imageUrl,
+                                                "availableSeats" to (currentSeats - 1),
+                                                "createdAt" to Timestamp.now()
+                                            )
+                                            transaction.set(cartRef, cartItem)
+                                        } else {
+                                            throw FirebaseFirestoreException("No more seats available", FirebaseFirestoreException.Code.ABORTED)
+                                        }
+                                    }.await()
                                     scope.launch { snack.showSnackbar("Añadido al carrito") }
+                                } catch (e: Exception) {
+                                    scope.launch { snack.showSnackbar("Error al añadir al carrito: ${e.message}") }
                                 }
+                            }
                         },
                         enabled = (classItem?.availableSeats ?: 0) > 0,
                         modifier = Modifier.fillMaxWidth()

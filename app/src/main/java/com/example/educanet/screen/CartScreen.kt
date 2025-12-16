@@ -10,13 +10,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -24,9 +30,11 @@ data class CartItem(
     val id: String = "",
     val classId: String = "",
     val classTitle: String = "",
+    val description: String = "",
     val price: Double = 0.0,
     val imageUrl: String = "",
-    val createdAt: Timestamp? = null
+    val createdAt: Timestamp? = null,
+    val availableSeats: Int = 0
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,15 +73,8 @@ fun CartScreen(
                     return@addSnapshotListener
                 }
 
-                items = snap?.documents?.map { d ->
-                    CartItem(
-                        id = d.id,
-                        classId = d.getString("classId") ?: "",
-                        classTitle = d.getString("classTitle") ?: d.getString("title") ?: "Clase sin título",
-                        price = d.getDouble("price") ?: 0.0,
-                        imageUrl = d.getString("imageUrl") ?: "",
-                        createdAt = d.getTimestamp("createdAt")
-                    )
+                items = snap?.documents?.mapNotNull { d ->
+                    d.toObject(CartItem::class.java)?.copy(id = d.id)
                 } ?: emptyList()
 
                 loading = false
@@ -101,6 +102,33 @@ fun CartScreen(
 
     val totalPrice = remember(filteredItems) {
         filteredItems.sumOf { it.price }
+    }
+
+    fun deleteCartItem(item: CartItem) {
+        if (item.id.isBlank() || item.classId.isBlank()) {
+            scope.launch { snack.showSnackbar("Error: Item inválido.") }
+            return
+        }
+
+        scope.launch {
+            try {
+                val classRef = db.collection("classes").document(item.classId)
+                val cartItemRef = db.collection("users").document(uid).collection("cart").document(item.id)
+
+                db.runTransaction { transaction ->
+                    // Increment available seats
+                    transaction.update(classRef, "availableSeats", FieldValue.increment(1))
+                    // Delete item from cart
+                    transaction.delete(cartItemRef)
+                    null
+                }.await()
+
+                snack.showSnackbar("Clase eliminada del carrito.")
+
+            } catch (e: Exception) {
+                snack.showSnackbar("Error al eliminar: ${e.message}")
+            }
+        }
     }
 
     Scaffold(
@@ -144,12 +172,20 @@ fun CartScreen(
                     ) {
                         items(filteredItems, key = { it.id }) { item ->
                             ElevatedCard(Modifier.fillMaxWidth()) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                                Row(modifier = Modifier.padding(12.dp)) {
+                                    if (item.imageUrl.isNotBlank()) {
+                                        AsyncImage(
+                                            model = item.imageUrl,
+                                            contentDescription = "Imagen de la clase",
+                                            modifier = Modifier
+                                                .size(100.dp)
+                                                .clip(MaterialTheme.shapes.medium),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                    }
+
+                                    Column(Modifier.weight(1f)) {
                                         Text(
                                             item.classTitle,
                                             style = MaterialTheme.typography.titleMedium,
@@ -157,26 +193,26 @@ fun CartScreen(
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(
+                                            item.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
                                             "Precio: $${"%.0f".format(item.price)}",
-                                            style = MaterialTheme.typography.bodyMedium
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            "Cupos restantes: ${item.availableSeats}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    IconButton(
-                                        onClick = {
-                                            if (processing) return@IconButton
-                                            scope.launch {
-                                                try {
-                                                    db.collection("users").document(uid)
-                                                        .collection("cart").document(item.id)
-                                                        .delete().await()
-                                                    snack.showSnackbar("Clase eliminada.")
-                                                } catch (e: Exception) {
-                                                    snack.showSnackbar("Error: ${e.message}")
-                                                }
-                                            }
-                                        }
-                                    ) {
-                                        Icon(Icons.Filled.Delete, contentDescription = "Eliminar")
+
+                                    IconButton(onClick = { deleteCartItem(item) }) {
+                                        Icon(Icons.Default.Delete, "Eliminar")
                                     }
                                 }
                             }
@@ -254,18 +290,15 @@ suspend fun checkoutCart(
             // Salvaguarda: no procesar si el usuario ya está inscrito
             val assignedStudents = classSnap.get("assignedStudents") as? List<*> ?: emptyList<Any>()
             if (uid in assignedStudents) {
-                return@runTransaction
+                throw FirebaseFirestoreException("Ya estás inscrito en ${item.classTitle}.", FirebaseFirestoreException.Code.ABORTED)
             }
 
             // Verificar y descontar cupo atómicamente
-            val seats = classSnap.getLong("availableSeats")
-            if (seats != null) {
-                if (seats <= 0) {
-                    // Sin cupos, no se puede inscribir
-                    return@runTransaction
-                }
-                transaction.update(classRef, "availableSeats", FieldValue.increment(-1))
+            val seats = classSnap.getLong("availableSeats") ?: 0
+            if (seats <= 0) {
+                throw FirebaseFirestoreException("No quedan cupos para ${item.classTitle}.", FirebaseFirestoreException.Code.ABORTED)
             }
+            transaction.update(classRef, "availableSeats", FieldValue.increment(-1))
 
             // Asignar alumno
             transaction.update(classRef, "assignedStudents", FieldValue.arrayUnion(uid))
