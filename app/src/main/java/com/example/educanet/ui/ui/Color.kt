@@ -2,10 +2,9 @@ package com.example.educanet.ui.ui
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val EducanetBlue = Color(0xFF00008B)
+val EducanetBlueLight = Color(0xFF1E90FF)
+val EducanetBlueDark = Color(0xFF000080)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val EducanetBackgroundLight = Color(0xFFDCE4F7)
+val EducanetBackgroundDark = Color(0xFF0D1B3C)

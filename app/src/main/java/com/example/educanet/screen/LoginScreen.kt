@@ -1,12 +1,15 @@
 package com.example.educanet.screen
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.educanet.R
 import com.example.educanet.util.AuthValidators
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
@@ -50,7 +53,11 @@ fun LoginScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Educanet", style = MaterialTheme.typography.headlineMedium)
+                Image(
+                    painter = painterResource(id = R.drawable.logo_educanet),
+                    contentDescription = "Educanet Logo",
+                    modifier = Modifier.height(100.dp)
+                )
 
                 OutlinedTextField(
                     value = email,

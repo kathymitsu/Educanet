@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -143,17 +144,40 @@ fun CartScreen(
                     ) {
                         items(filteredItems, key = { it.id }) { item ->
                             ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text(
-                                        item.classTitle,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        "Precio: $${"%.0f".format(item.price)}",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
+                                Row(
+                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                                        Text(
+                                            item.classTitle,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "Precio: $${"%.0f".format(item.price)}",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            if (processing) return@IconButton
+                                            scope.launch {
+                                                try {
+                                                    db.collection("users").document(uid)
+                                                        .collection("cart").document(item.id)
+                                                        .delete().await()
+                                                    snack.showSnackbar("Clase eliminada.")
+                                                } catch (e: Exception) {
+                                                    snack.showSnackbar("Error: ${e.message}")
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(Icons.Filled.Delete, contentDescription = "Eliminar")
+                                    }
                                 }
                             }
                         }

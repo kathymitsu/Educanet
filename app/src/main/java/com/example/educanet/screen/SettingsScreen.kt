@@ -27,15 +27,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage // Asume que estás usando Coil
+import com.example.educanet.data.UserPrefs
 import com.google.firebase.auth.FirebaseAuth
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
+import com.google.firebase.firestore.FirebaseFirestore
 // Importaciones de Coroutines
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 // Importaciones de I/O
 import java.io.File
@@ -51,15 +54,27 @@ fun SettingsScreen(
 ) {
     val appContext = LocalContext.current.applicationContext
     val auth = remember { FirebaseAuth.getInstance() }
+    val db = remember { FirebaseFirestore.getInstance() }
     val uid = auth.currentUser?.uid.orEmpty()
 
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    val profile by UserPrefs.profileFlow(appContext).collectAsState(initial = UserPrefs.Profile())
+    var currentName by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf("") }
+
     var avatarImagePath by remember { mutableStateOf<Uri?>(null) }
     var loadingStatus by remember { mutableStateOf(false) }
 
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    LaunchedEffect(profile) {
+        if (profile.name.isNotBlank()) {
+            currentName = profile.name
+            newName = profile.name
+        }
+    }
 
     // --- Permisos ---
     val readStoragePermissionToAsk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -162,6 +177,33 @@ fun SettingsScreen(
         }
     }
 
+    fun updateUserName() {
+        if (newName.isBlank() || newName == currentName) {
+            scope.launch { snack.showSnackbar("El nombre no puede estar vacío o ser igual al actual.") }
+            return
+        }
+
+        loadingStatus = true
+        scope.launch {
+            try {
+                // 1. Actualizar en Firestore
+                db.collection("users").document(uid).update("name", newName).await()
+
+                // 2. Actualizar en DataStore local
+                UserPrefs.saveProfile(appContext, newName, profile.role)
+
+                // 3. Actualizar estado local
+                currentName = newName
+
+                snack.showSnackbar("Nombre actualizado correctamente.")
+            } catch (e: Exception) {
+                snack.showSnackbar("Error al actualizar el nombre: ${e.message}")
+            } finally {
+                loadingStatus = false
+            }
+        }
+    }
+
 
     Scaffold(
         topBar = {
@@ -182,8 +224,28 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp) // Reducido para mejor fit
         ) {
+
+            // --- Sección de Cambio de Nombre ---
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                label = { Text("Nombre de usuario") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !loadingStatus
+            )
+
+            Button(
+                onClick = { updateUserName() },
+                enabled = !loadingStatus && newName.isNotBlank() && newName != currentName,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Guardar nombre")
+            }
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
 
             // ---------- Avatar UI ----------
             Box(

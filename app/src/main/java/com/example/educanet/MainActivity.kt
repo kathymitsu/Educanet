@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -24,6 +23,7 @@ import com.example.educanet.screen.ProgressScreen
 import com.example.educanet.screen.RegisterScreen
 import com.example.educanet.screen.SettingsScreen
 import com.example.educanet.screen.ResourcesScreen
+import com.example.educanet.ui.ui.EducanetTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
 fun EducanetApp() {
     val navController = rememberNavController()
 
-    MaterialTheme {
+    EducanetTheme {
         Scaffold(
             modifier = Modifier.fillMaxSize()
         ) { 
@@ -111,6 +111,10 @@ fun EducanetNav(
                 },
                 onOpenMyClasses = {
                     navController.navigate("myClasses")
+                },
+                onOpenNotifications = {
+                    // Decide what should happen. For example, navigate to a new screen.
+                    // navController.navigate("notifications")
                 }
             )
         }

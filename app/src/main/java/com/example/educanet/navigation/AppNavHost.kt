@@ -18,15 +18,14 @@ fun AppNavHost() {
         startDestination = "home"      // si quieres partir en login puedes cambiar a "login"
     ) {
         // HOME
+        // AppNavHost.kt
+
         composable("home") {
+            // Inside composable("home") { ... }
             HomeScreen(
                 onLogout = {
-                    // aquí si quieres puedes limpiar sesión y navegar a login
-                    // navController.navigate("login") {
-                    //     popUpTo("home") { inclusive = true }
-                    // }
-                },
-                onNewClass = { navController.navigate("classEdit") },
+                    // ...
+                },        onNewClass = { navController.navigate("classEdit") },
                 onOpenClass = { id -> navController.navigate("classDetail/$id") },
                 onOpenResources = { /* navController.navigate("resources") si la creas */ },
                 onOpenProgress = { studentId ->
@@ -38,11 +37,16 @@ fun AppNavHost() {
                 onOpenCart = {
                     navController.navigate("cart")
                 },
-                onOpenMyClasses = {                      // 👈 FALTABA ESTE
+                onOpenMyClasses = {
                     navController.navigate("myClasses")
+                },
+                onOpenNotifications = {
+                    navController.navigate("notifications")
                 }
             )
+
         }
+
 
         // DETALLE DE CLASE
         composable(

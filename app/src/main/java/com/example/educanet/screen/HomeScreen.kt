@@ -1,21 +1,52 @@
-
 package com.example.educanet.screen
 
-import com.example.educanet.ui.ui.StorageImage
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedButton
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.educanet.ui.ui.StorageImage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -28,8 +59,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.ui.platform.LocalContext
 import com.example.educanet.data.UserPrefs
-import com.google.firebase.Timestamp
 import com.example.educanet.item.ClassItem
+import com.google.firebase.Timestamp
+import java.text.NumberFormat
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,7 +74,8 @@ fun HomeScreen(
     onOpenProgress: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCart: () -> Unit,
-    onOpenMyClasses: () -> Unit = {}
+    onOpenMyClasses: () -> Unit = {},
+    onOpenNotifications: () -> Unit
 ) {
     val ctx = LocalContext.current
     val db = remember { FirebaseFirestore.getInstance() }
@@ -74,6 +108,8 @@ fun HomeScreen(
         if (profile.role.isBlank() || profile.name.isBlank()) {
             runCatching {
                 val snap = db.collection("users").document(uid).get().await()
+
+
                 val nm = snap.getString("name") ?: (snap.getString("email") ?: "")
                 val rl = snap.getString("role") ?: "estudiante"
                 name = nm
@@ -124,48 +160,22 @@ fun HomeScreen(
         }
     }
 
-    // 🛒 función para que SOLO el alumno agregue al carro
-    fun addToCart(classId: String, item: ClassItem) {
-        if (!isStudent || uid.isBlank()) return
-
-        val cartRef = db.collection("users")
-            .document(uid)
-            .collection("cart")
-            .document(classId)
-
-        db.runTransaction { tr ->
-            val snap = tr.get(cartRef)
-            if (snap.exists()) {
-                val currentQty = (snap.getLong("quantity") ?: 1L).toInt()
-                tr.update(cartRef, "quantity", currentQty + 1)
-            } else {
-                val data = mapOf(
-                    "classId" to classId,
-                    "classTitle" to item.title,
-                    "price" to item.price,
-                    "imageUrl" to item.imageUrl,
-                    "quantity" to 1,
-                    "createdAt" to Timestamp.now()
-                )
-                tr.set(cartRef, data)
-            }
-        }.addOnSuccessListener {
-            scope.launch { snackbar.showSnackbar("Clase agregada al carrito") }
-        }.addOnFailureListener { e ->
-            scope.launch { snackbar.showSnackbar("Error al agregar al carrito: ${e.message}") }
-        }
-    }
-
     // 🧭 UI
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Educanet") },
                 actions = {
+                    IconButton(onClick = onOpenNotifications) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Notificaciones"
+                        )
+                    }
                     if (isStudent) {
                         IconButton(onClick = onOpenCart) {
                             Icon(
-                                imageVector = Icons.Default.Add, // cámbialo por ícono de carrito si quieres
+                                imageVector = Icons.Default.ShoppingCart,
                                 contentDescription = "Carrito"
                             )
                         }
@@ -278,7 +288,7 @@ fun HomeScreen(
                                     ElevatedCard(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable(enabled = !isStudent) { onOpenClass(id) }
+                                            .clickable { onOpenClass(id) }
                                     ) {
                                         Column(Modifier.padding(12.dp)) {
                                             if (c.imageUrl.isNotBlank()) {
@@ -309,42 +319,52 @@ fun HomeScreen(
                                                 )
                                             }
 
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                "Precio: $${"%.0f".format(c.price)}",
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                            Text(
-                                                "Cupos disponibles: ${c.availableSeats ?: 0}",
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
+                                            Spacer(Modifier.height(8.dp))
 
-                                            // profesor puede ver qué UID está asignado
-                                            if (isProfessor) {
-                                                Spacer(Modifier.height(4.dp))
+                                            // Precio y botón de añadir al carrito
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                val format = NumberFormat.getCurrencyInstance(Locale("es", "MX"))
                                                 Text(
-                                                    "Profesor asignado: ${c.professorId.ifBlank { "Sin asignar" }}",
-                                                    style = MaterialTheme.typography.bodySmall
+                                                    text = format.format(c.price),
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Bold
                                                 )
-                                            }
 
-                                            if (!c.isActive) {
-                                                Spacer(Modifier.height(4.dp))
-                                                AssistChip(onClick = {}, label = { Text("Inactiva") })
-                                            }
+                                                ElevatedButton(onClick = {
+                                                    if (uid.isBlank()) {
+                                                        scope.launch {
+                                                            snackbar.showSnackbar("Debes iniciar sesión para añadir al carrito.")
+                                                        }
+                                                        return@ElevatedButton
+                                                    }
 
-                                            if (isStudent) {
-                                                Spacer(Modifier.height(8.dp))
-                                                Button(
-                                                    onClick = { addToCart(id, c) },
-                                                    enabled = (c.availableSeats ?: 0L) > 0
-                                                ) {
-                                                    Text(
-                                                        if ((c.availableSeats ?: 0L) > 0)
-                                                            "Agregar al carrito"
-                                                        else
-                                                            "Sin cupos"
+                                                    val cartItem = hashMapOf(
+                                                        "classId" to id,
+                                                        "classTitle" to c.title,
+                                                        "price" to c.price,
+                                                        "imageUrl" to c.imageUrl,
+                                                        "createdAt" to Timestamp.now()
                                                     )
+
+                                                    db.collection("users").document(uid)
+                                                        .collection("cart").document(id)
+                                                        .set(cartItem)
+                                                        .addOnSuccessListener {
+                                                            scope.launch {
+                                                                snackbar.showSnackbar("Clase añadida al carrito.")
+                                                            }
+                                                        }
+                                                        .addOnFailureListener { e ->
+                                                            scope.launch {
+                                                                snackbar.showSnackbar("Error: ${e.message}")
+                                                            }
+                                                        }
+                                                }) {
+                                                    Text("Añadir al carrito")
                                                 }
                                             }
                                         }
