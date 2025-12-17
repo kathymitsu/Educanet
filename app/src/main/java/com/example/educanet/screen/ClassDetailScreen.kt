@@ -367,7 +367,16 @@ fun ClassDetailScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = {
-                        db.collection("classes").document(classId).update("professorId", selectedProfessorId)
+                        scope.launch {
+                            try {
+                                db.collection("classes").document(classId)
+                                    .update("professorId", selectedProfessorId ?: "")
+                                    .await()
+                                snack.showSnackbar("Profesor guardado correctamente.")
+                            } catch (e: Exception) {
+                                snack.showSnackbar("Error al guardar: ${e.message}")
+                            }
+                        }
                     }) {
                         Text("Guardar profesor")
                     }

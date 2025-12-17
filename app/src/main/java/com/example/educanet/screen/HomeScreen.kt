@@ -169,8 +169,8 @@ fun HomeScreen(
         }
 
         when (role) {
-            "admin" -> attachListener(base)                       // ve todas
-            "profesor" -> attachListener(base.whereEqualTo("isActive", true))
+            "admin" -> attachListener(base)
+            "profesor" -> attachListener(base.whereEqualTo("professorId", uid))
             else -> attachListener(base.whereEqualTo("isActive", true))
         }
     }
@@ -271,7 +271,9 @@ fun HomeScreen(
 
             HorizontalDivider()
             Text(
-                if (isStudent) "Clases disponibles" else "Clases",
+                if (isStudent) "Clases disponibles"
+                else if (isProfessor) "Mis Cursos"
+                else "Clases",
                 style = MaterialTheme.typography.titleMedium
             )
 
@@ -301,6 +303,7 @@ fun HomeScreen(
                         visibleList.isEmpty() ->
                             Text(
                                 if (isStudent) "No hay clases con cupos disponibles."
+                                else if (isProfessor) "Aún no has creado ningún curso."
                                 else "No hay clases para tu rol."
                             )
 
