@@ -31,8 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.educanet.item.EvaluationItem
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.Timestamp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,11 +45,35 @@ fun EvaluationEditScreen(
 
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var questions by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+    var questions by remember { mutableStateOf(listOf<String>()) }
 
     LaunchedEffect(evaluationId) {
         if (evaluationId != null) {
-            // TODO: Cargar la evaluación y sus preguntas
+            db.collection("classes").document(classId!!).collection("evaluations").document(evaluationId).get()
+                .addOnSuccessListener { doc ->
+                    title = doc.getString("title") ?: ""
+                    description = doc.getString("description") ?: ""
+                    questions = doc.get("questions") as? List<String> ?: listOf()
+                }
+        }
+    }
+
+    fun saveEvaluation() {
+        if (classId == null) return
+
+        val evaluationData = hashMapOf(
+            "title" to title,
+            "description" to description,
+            "questions" to questions,
+            "createdAt" to Timestamp.now()
+        )
+
+        val collection = db.collection("classes").document(classId).collection("evaluations")
+
+        if (evaluationId == null) {
+            collection.add(evaluationData).addOnSuccessListener { onBack() }
+        } else {
+            collection.document(evaluationId).set(evaluationData).addOnSuccessListener { onBack() }
         }
     }
 
@@ -93,19 +117,33 @@ fun EvaluationEditScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(text = "Preguntas", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { /* TODO: Añadir nueva pregunta */ }) {
+                IconButton(onClick = { questions = questions + "" }) {
                     Icon(Icons.Default.Add, contentDescription = "Añadir pregunta")
                 }
             }
 
             LazyColumn(modifier = Modifier.weight(1f)) {
                 itemsIndexed(questions) { index, question ->
-                    // TODO: Mostrar la pregunta
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = question,
+                            onValueChange = { newText ->
+                                questions = questions.toMutableList().also { it[index] = newText }
+                            },
+                            label = { Text("Pregunta ${index + 1}") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = {
+                            questions = questions.toMutableList().also { it.removeAt(index) }
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar pregunta")
+                        }
+                    }
                 }
             }
 
             Button(
-                onClick = { /* TODO: Guardar evaluación */ },
+                onClick = { saveEvaluation() },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Guardar")
