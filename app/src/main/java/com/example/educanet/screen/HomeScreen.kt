@@ -350,14 +350,16 @@ fun HomeScreen(
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                horizontalArrangement = if (isProfessor) Arrangement.End else Arrangement.SpaceBetween
                                             ) {
-                                                val format = NumberFormat.getCurrencyInstance(Locale("es", "MX"))
-                                                Text(
-                                                    text = format.format(c.price),
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Bold
-                                                )
+                                                if (!isProfessor) {
+                                                    val format = NumberFormat.getCurrencyInstance(Locale("es", "MX"))
+                                                    Text(
+                                                        text = format.format(c.price),
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
                                                 Text(
                                                     "Cupos disponibles: ${c.availableSeats ?: 0}",
                                                     style = MaterialTheme.typography.bodyMedium

@@ -1,4 +1,3 @@
-
 package com.example.educanet.navigation
 
 import androidx.compose.runtime.Composable
@@ -62,8 +61,8 @@ fun AppNavHost() {
             ClassDetailScreen(
                 classId = classId,
                 onBack = { navController.popBackStack() },
-                onEdit = { id -> navController.navigate("classEdit/$id") } // <-- Añadido para editar
-
+                onEdit = { id -> navController.navigate("classEdit/$id") },
+                onOpenProgress = { studentId -> navController.navigate("progress/$studentId") }
             )
         }
 

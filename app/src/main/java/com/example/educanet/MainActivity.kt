@@ -109,7 +109,8 @@ fun EducanetNav(
             ClassDetailScreen(
                 classId = classId,
                 onBack = { navController.popBackStack() },
-                onEdit = { classIdToEdit -> navController.navigate("editClass/$classIdToEdit") }
+                onEdit = { id -> navController.navigate("editClass/$id") },
+                onOpenProgress = { studentId -> navController.navigate("progress/$studentId") }
             )
         }
         

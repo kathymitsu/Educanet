@@ -1,5 +1,6 @@
 package com.example.educanet.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Grade
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +32,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -67,6 +70,7 @@ fun ClassDetailScreen(
     classId: String,
     onBack: () -> Unit,
     onEdit: (String) -> Unit,
+    onOpenProgress: (String) -> Unit, // <--- para ver el progreso de un alumno
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val db = remember { FirebaseFirestore.getInstance() }
@@ -185,7 +189,7 @@ fun ClassDetailScreen(
     val isEnrolled = classItem?.assignedStudents?.contains(uid) == true
 
     val canEditClass = isAdmin || (isProfessor && classItem?.professorId == uid)
-    val canManageGrades = isProfessor
+    val canManageGrades = isAdmin || (isProfessor && classItem?.professorId == uid)
 
     val visibleGrades = remember(grades, isStudent, uid) {
         if (isStudent) grades.filter { it.studentId == uid } else grades
@@ -391,33 +395,51 @@ fun ClassDetailScreen(
                         Spacer(Modifier.width(10.dp))
                         AssistChip(onClick = {}, label = { Text(if (avg >= 70) "Aprobado" else "En progreso") })
                     }
-                }
+                    Spacer(Modifier.height(16.dp))
+                    Text("Calificaciones", style = MaterialTheme.typography.titleMedium)
 
-                Text("Calificaciones", style = MaterialTheme.typography.titleMedium)
-
-                if (visibleGrades.isEmpty()) {
-                    Text(if (isStudent) "Aún no tienes calificaciones." else "Sin calificaciones.")
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(visibleGrades, key = { it.id }) { g ->
-                            ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text(
-                                        text = if (isStudent) "Tu nota: ${g.score}" else "${assignedNames[g.studentId] ?: "Alumno desconocido"} — ${g.score}",
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    if (g.comment.isNotBlank()) {
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(g.comment, style = MaterialTheme.typography.bodyMedium)
+                    if (visibleGrades.isEmpty()) {
+                        Text("Aún no tienes calificaciones.")
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(visibleGrades, key = { it.id }) { g ->
+                                ElevatedCard(Modifier.fillMaxWidth()) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = "Nota: ${g.score}",
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        if (g.comment.isNotBlank()) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(g.comment, style = MaterialTheme.typography.bodyMedium)
+                                        }
                                     }
-                                    if (canManageGrades) {
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                            IconButton(onClick = { editing = g; showAddEdit = true }) {
-                                                Icon(Icons.Default.Edit, "Editar nota")
-                                            }
-                                            IconButton(onClick = { deleteGrade(g) }) {
-                                                Icon(Icons.Default.Delete, "Eliminar nota", tint = MaterialTheme.colorScheme.error)
-                                            }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // VISTA PARA PROFESOR / ADMIN: LISTA DE ALUMNOS
+                    Text("Alumnos inscritos", style = MaterialTheme.typography.titleMedium)
+                    val students = classItem?.assignedStudents ?: emptyList()
+
+                    if (students.isEmpty()) {
+                        Text("No hay alumnos inscritos en este curso.")
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(students) { studentId ->
+                                val studentName = assignedNames[studentId] ?: "Alumno (ID: ${studentId.take(6)}...)"
+                                ElevatedCard(Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(studentName, style = MaterialTheme.typography.bodyLarge)
+                                        OutlinedButton(onClick = { onOpenProgress(studentId) }) {
+                                            Text("Ver/Editar Progreso")
+                                            Spacer(Modifier.width(4.dp))
+                                            Icon(Icons.Default.TrendingUp, contentDescription = "Progreso")
                                         }
                                     }
                                 }
