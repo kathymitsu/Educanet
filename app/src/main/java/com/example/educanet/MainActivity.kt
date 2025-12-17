@@ -18,6 +18,7 @@ import com.example.educanet.screen.AddResourceScreen
 import com.example.educanet.screen.CartScreen
 import com.example.educanet.screen.ClassDetailScreen
 import com.example.educanet.screen.ClassEditScreen
+import com.example.educanet.screen.CreateProfessorScreen
 import com.example.educanet.screen.HomeScreen
 import com.example.educanet.screen.LoginScreen
 import com.example.educanet.screen.MyClassesScreen
@@ -66,13 +67,9 @@ fun EducanetNav(
         composable(route = "login") {
             LoginScreen(
                 onLoginSuccess = {
-                    navController.navigate("home") {
-                        popUpTo("login") { inclusive = true }
-                    }
+                    navController.navigate("home") { popUpTo("login") { inclusive = true } }
                 },
-                onRegisterClick = {
-                    navController.navigate("register")
-                }
+                onRegisterClick = { navController.navigate("register") }
             )
         }
 
@@ -80,9 +77,7 @@ fun EducanetNav(
         composable(route = "register") {
             RegisterScreen(
                 onRegisterSuccess = {
-                    navController.navigate("home") {
-                        popUpTo("login") { inclusive = true }
-                    }
+                    navController.navigate("home") { popUpTo("login") { inclusive = true } }
                 }
             )
         }
@@ -91,35 +86,17 @@ fun EducanetNav(
         composable(route = "home") {
             HomeScreen(
                 onLogout = {
-                    navController.navigate("login") {
-                        popUpTo("home") { inclusive = true }
-                    }
+                    navController.navigate("login") { popUpTo("home") { inclusive = true } }
                 },
-                onNewClass = {
-                    navController.navigate("createClass")
-                },
-                onOpenClass = { classId ->
-                    navController.navigate("classDetail/$classId")
-                },
-                onOpenResources = {
-                     navController.navigate("resources")
-                },
-                onOpenProgress = { studentId ->
-                    navController.navigate("progress/$studentId")
-                },
-                onOpenSettings = {
-                    navController.navigate("settings")
-                },
-                onOpenCart = {
-                    navController.navigate("cart")
-                },
-                onOpenMyClasses = {
-                    navController.navigate("myClasses")
-                },
-                onOpenNotifications = {
-                    // Decide what should happen. For example, navigate to a new screen.
-                    // navController.navigate("notifications")
-                }
+                onNewClass = { navController.navigate("createClass") },
+                onCreateProfessor = { navController.navigate("createProfessor") },
+                onOpenClass = { classId -> navController.navigate("classDetail/$classId") },
+                onOpenResources = { navController.navigate("resources") },
+                onOpenProgress = { studentId -> navController.navigate("progress/$studentId") },
+                onOpenSettings = { navController.navigate("settings") },
+                onOpenCart = { navController.navigate("cart") },
+                onOpenMyClasses = { navController.navigate("myClasses") },
+                onOpenNotifications = {}
             )
         }
 
@@ -162,9 +139,7 @@ fun EducanetNav(
 
         // AJUSTES
         composable(route = "settings") {
-            SettingsScreen(
-                onBack = { navController.popBackStack() }
-            )
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
 
         // CARRITO
@@ -187,12 +162,8 @@ fun EducanetNav(
         composable(route = "myClasses") {
             MyClassesScreen(
                 onBack = { navController.popBackStack() },
-                onOpenClass = { classId ->
-                    navController.navigate("classDetail/$classId")
-                },
-                onOpenProgress = { studentId ->
-                    navController.navigate("progress/$studentId")
-                }
+                onOpenClass = { classId -> navController.navigate("classDetail/$classId") },
+                onOpenProgress = { studentId -> navController.navigate("progress/$studentId") }
             )
         }
 
@@ -200,17 +171,18 @@ fun EducanetNav(
         composable(route = "resources") {
             ResourcesScreen(
                 onBack = { navController.popBackStack() },
-                onAddResource = {
-                    navController.navigate("addResource")
-                }
+                onAddResource = { navController.navigate("addResource") }
             )
         }
 
         // AÑADIR RECURSO
         composable(route = "addResource") {
-            AddResourceScreen(
-                onBack = { navController.popBackStack() }
-            )
+            AddResourceScreen(onBack = { navController.popBackStack() })
+        }
+        
+        // CREAR PROFESOR
+        composable(route = "createProfessor") {
+            CreateProfessorScreen(onBack = { navController.popBackStack() })
         }
     }
 }

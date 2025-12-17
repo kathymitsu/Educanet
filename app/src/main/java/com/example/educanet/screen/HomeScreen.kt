@@ -74,6 +74,7 @@ import java.util.Locale
 fun HomeScreen(
     onLogout: () -> Unit,
     onNewClass: () -> Unit,
+    onCreateProfessor: () -> Unit, // <--- Nueva función
     onOpenClass: (String) -> Unit,
     onOpenResources: () -> Unit,
     onOpenProgress: (String) -> Unit,
@@ -97,6 +98,7 @@ fun HomeScreen(
 
     val isStudent = role == "estudiante"
     val isProfessor = role == "profesor"
+    val isAdmin = role == "admin" // <--- Variable para admin
 
     var loading by remember { mutableStateOf(true) }
     var classes by remember { mutableStateOf(listOf<Pair<String, ClassItem>>()) }
@@ -204,7 +206,7 @@ fun HomeScreen(
         },
         floatingActionButton = {
             // FAB de crear clase para profesor o admin
-            if (role == "profesor" || role == "admin") {
+            if (isProfessor || isAdmin) {
                 FloatingActionButton(onClick = onNewClass) {
                     Icon(Icons.Default.Add, contentDescription = "Nueva clase")
                 }
@@ -229,6 +231,14 @@ fun HomeScreen(
                 role?.let {
                     AssistChip(onClick = {}, label = { Text(it.replaceFirstChar { c -> c.uppercase() }) })
                 }
+            }
+
+            // Botón para crear profesor (solo admin)
+            if (isAdmin) {
+                ElevatedButton(
+                    onClick = onCreateProfessor,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Crear Profesor") }
             }
 
             Row(

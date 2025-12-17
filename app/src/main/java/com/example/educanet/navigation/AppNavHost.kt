@@ -42,6 +42,11 @@ fun AppNavHost() {
                 },
                 onOpenNotifications = {
                     navController.navigate("notifications")
+                },
+                onCreateProfessor = {
+                    // You can define the navigation for creating a professor here.
+                    // For example, navigate to a "createProfessor" screen.
+                    // navController.navigate("createProfessor")
                 }
             )
 
