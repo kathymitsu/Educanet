@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -13,6 +14,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.educanet.screen.AddResourceScreen
 import com.example.educanet.screen.CartScreen
 import com.example.educanet.screen.ClassDetailScreen
 import com.example.educanet.screen.ClassEditScreen
@@ -41,9 +43,10 @@ fun EducanetApp() {
     EducanetTheme {
         Scaffold(
             modifier = Modifier.fillMaxSize()
-        ) { 
+        ) { innerPadding ->
             EducanetNav(
-                navController = navController
+                navController = navController,
+                modifier = Modifier.padding(innerPadding)
             )
         }
     }
@@ -51,12 +54,13 @@ fun EducanetApp() {
 
 @Composable
 fun EducanetNav(
-    navController: NavHostController
+    navController: NavHostController,
+    modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,
         startDestination = "login",
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().then(modifier)
     ) {
         // LOGIN
         composable(route = "login") {
@@ -195,6 +199,16 @@ fun EducanetNav(
         // RECURSOS
         composable(route = "resources") {
             ResourcesScreen(
+                onBack = { navController.popBackStack() },
+                onAddResource = {
+                    navController.navigate("addResource")
+                }
+            )
+        }
+
+        // AÑADIR RECURSO
+        composable(route = "addResource") {
+            AddResourceScreen(
                 onBack = { navController.popBackStack() }
             )
         }

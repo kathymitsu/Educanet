@@ -171,7 +171,7 @@ fun MyClassesScreen(
                                     // Botón para ver progreso
                                     Spacer(Modifier.height(8.dp))
                                     Button(
-                                        onClick = { onOpenProgress(uid) },
+                                        onClick = { onOpenProgress(item.classId) },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text("Ver progreso")

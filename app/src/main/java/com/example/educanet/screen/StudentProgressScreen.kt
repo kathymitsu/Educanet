@@ -40,6 +40,7 @@ data class Student(val uid: String, val name: String, val email: String)
 fun StudentProgressScreen(
     onBack: () -> Unit,
     onOpenProgress: (String) -> Unit,
+    classId: String? = null // Añadido para filtrar por clase
 ) {
     val db = remember { FirebaseFirestore.getInstance() }
     val snackbar = remember { SnackbarHostState() }
@@ -48,14 +49,36 @@ fun StudentProgressScreen(
     var students by remember { mutableStateOf<List<Student>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(classId) {
         loading = true
         try {
-            val snapshot = db.collection("users")
-                .whereEqualTo("role", "estudiante")
-                .orderBy("name", Query.Direction.ASCENDING)
-                .get()
-                .await()
+            val studentUids = if (classId != null) {
+                // 1. Obtener IDs de usuarios inscritos en la clase
+                val progressSnapshot = db.collection("progress")
+                    .whereEqualTo("classId", classId)
+                    .get()
+                    .await()
+                progressSnapshot.documents.mapNotNull { it.getString("userId") }.distinct()
+            } else {
+                // Comportamiento original: todos los estudiantes
+                null
+            }
+
+            val query = if (studentUids != null) {
+                if (studentUids.isEmpty()) {
+                    // No hay estudiantes para esta clase, no hacer más consultas
+                    students = emptyList()
+                    loading = false
+                    return@LaunchedEffect
+                }
+                // 2. Consultar solo los usuarios con esos IDs
+                db.collection("users").whereIn("uid", studentUids)
+            } else {
+                // Consulta original
+                db.collection("users").whereEqualTo("role", "estudiante")
+            }
+
+            val snapshot = query.orderBy("name", Query.Direction.ASCENDING).get().await()
 
             students = snapshot.documents.mapNotNull { doc ->
                 Student(
@@ -64,6 +87,7 @@ fun StudentProgressScreen(
                     email = doc.getString("email") ?: "Email no disponible"
                 )
             }
+
         } catch (e: Exception) {
             scope.launch { snackbar.showSnackbar("Error al cargar alumnos: ${e.message}") }
         } finally {
@@ -74,7 +98,7 @@ fun StudentProgressScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Progreso de Alumnos") },
+                title = { Text(if (classId != null) "Alumnos en la Clase" else "Progreso de Alumnos") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Atrás") } }
             )
         },

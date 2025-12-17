@@ -119,7 +119,22 @@ fun AppNavHost() {
                 onBack = { navController.popBackStack() },
                 onOpenClass = { classId ->
                     navController.navigate("classDetail/$classId")        },
-                onOpenProgress = { studentId ->      //
+                onOpenProgress = { classId ->      //
+                    navController.navigate("studentProgress/$classId")
+                }
+            )
+        }
+
+        // PROGRESO DE ALUMNOS POR CLASE
+        composable(
+            route = "studentProgress/{classId}",
+            arguments = listOf(navArgument("classId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val classId = backStackEntry.arguments?.getString("classId") ?: ""
+            StudentProgressScreen(
+                classId = classId,
+                onBack = { navController.popBackStack() },
+                onOpenProgress = { studentId ->
                     navController.navigate("progress/$studentId")
                 }
             )

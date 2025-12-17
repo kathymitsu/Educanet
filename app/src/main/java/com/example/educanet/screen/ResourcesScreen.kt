@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.educanet.data.UserPrefs
 import com.example.educanet.item.ResourceItem
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -24,12 +26,16 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResourcesScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onAddResource: () -> Unit
 ) {
     val db = remember { FirebaseFirestore.getInstance() }
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val ctx = LocalContext.current
+
+    val profile by UserPrefs.profileFlow(ctx).collectAsState(initial = UserPrefs.Profile())
+    val role = profile.role
 
     var items by remember { mutableStateOf<List<ResourceItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -66,6 +72,13 @@ fun ResourcesScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            if (role == "admin" || role == "profesor") {
+                FloatingActionButton(onClick = onAddResource) {
+                    Icon(Icons.Default.Add, contentDescription = "Nuevo recurso")
+                }
+            }
         },
         snackbarHost = { SnackbarHost(snack) }
     ) { pad ->
