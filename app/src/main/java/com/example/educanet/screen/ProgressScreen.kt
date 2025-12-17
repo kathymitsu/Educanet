@@ -23,7 +23,8 @@ import java.util.Locale
 @Composable
 fun ProgressScreen(
     onBack: () -> Unit,
-    studentId: String? // si viene null, se usa el usuario logeado
+    studentId: String?, // si viene null, se usa el usuario logeado
+    classId: String? // para filtrar por una clase específica
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val db = remember { FirebaseFirestore.getInstance() }
@@ -39,16 +40,21 @@ fun ProgressScreen(
         SimpleDateFormat("dd 'de' MMMM 'del' yyyy", Locale("es", "CL"))
     }
 
-    LaunchedEffect(effectiveUserId) {
+    LaunchedEffect(effectiveUserId, classId) {
         if (effectiveUserId == null) {
             error = "No se encontró el usuario para cargar el progreso."
             loading = false
             return@LaunchedEffect
         }
 
-        db.collection("progress")
-            .whereEqualTo("userId", effectiveUserId)
-            .addSnapshotListener { snap, e ->
+        var query: Query = db.collection("progress")
+            .whereEqualTo("studentId", effectiveUserId)
+
+        if (classId != null) {
+            query = query.whereEqualTo("classId", classId)
+        }
+
+        query.addSnapshotListener { snap, e ->
                 if (e != null) {
                     error = e.message
                     loading = false

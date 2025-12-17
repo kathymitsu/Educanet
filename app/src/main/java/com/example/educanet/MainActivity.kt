@@ -19,6 +19,9 @@ import com.example.educanet.screen.CartScreen
 import com.example.educanet.screen.ClassDetailScreen
 import com.example.educanet.screen.ClassEditScreen
 import com.example.educanet.screen.CreateProfessorScreen
+import com.example.educanet.screen.EvaluationEditScreen
+import com.example.educanet.screen.EvaluationListScreen
+import com.example.educanet.screen.EvaluationScreen
 import com.example.educanet.screen.HomeScreen
 import com.example.educanet.screen.LoginScreen
 import com.example.educanet.screen.MyClassesScreen
@@ -27,6 +30,7 @@ import com.example.educanet.screen.RegisterScreen
 import com.example.educanet.screen.SettingsScreen
 import com.example.educanet.screen.ResourcesScreen
 import com.example.educanet.ui.ui.EducanetTheme
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,7 +92,7 @@ fun EducanetNav(
                 onLogout = {
                     navController.navigate("login") { popUpTo("home") { inclusive = true } }
                 },
-                onNewClass = { navController.navigate("createClass") },
+                onNewClass = { navController.navigate("classEdit") },
                 onCreateProfessor = { navController.navigate("createProfessor") },
                 onOpenClass = { classId -> navController.navigate("classDetail/$classId") },
                 onOpenResources = { navController.navigate("resources") },
@@ -109,15 +113,19 @@ fun EducanetNav(
             ClassDetailScreen(
                 classId = classId,
                 onBack = { navController.popBackStack() },
-                onEdit = { id -> navController.navigate("editClass/$id") },
-                onOpenProgress = { studentId -> navController.navigate("progress/$studentId") }
+                onEdit = { id -> navController.navigate("classEdit?classId=$id") },
+                onOpenProgress = { studentId, progressClassId -> navController.navigate("progress/$studentId?classId=$progressClassId") },
+                onOpenEvaluations = { evalClassId -> navController.navigate("evaluations/$evalClassId") }
             )
         }
-        
-        // EDITAR CLASE
+
+        // CREAR/EDITAR CLASE (Unified)
         composable(
-            route = "editClass/{classId}",
-            arguments = listOf(navArgument("classId") { type = NavType.StringType })
+            route = "classEdit?classId={classId}",
+            arguments = listOf(navArgument("classId") {
+                type = NavType.StringType
+                nullable = true
+            })
         ) { backStackEntry ->
             val classId = backStackEntry.arguments?.getString("classId")
             ClassEditScreen(
@@ -128,13 +136,21 @@ fun EducanetNav(
 
         // PROGRESO
         composable(
-            route = "progress/{studentId}",
-            arguments = listOf(navArgument("studentId") { type = NavType.StringType })
+            route = "progress/{studentId}?classId={classId}",
+            arguments = listOf(
+                navArgument("studentId") { type = NavType.StringType },
+                navArgument("classId") {
+                    type = NavType.StringType
+                    nullable = true
+                }
+            )
         ) { backStackEntry ->
             val studentId = backStackEntry.arguments?.getString("studentId")
+            val classId = backStackEntry.arguments?.getString("classId")
             ProgressScreen(
                 onBack = { navController.popBackStack() },
-                studentId = studentId
+                studentId = studentId,
+                classId = classId
             )
         }
 
@@ -151,20 +167,17 @@ fun EducanetNav(
             )
         }
 
-        // ✅ CREAR CLASE
-        composable(route = "createClass") {
-            ClassEditScreen(
-                classId = null,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        // ✅ MIS CLASES (alumno)
+        // MIS CLASES (alumno)
         composable(route = "myClasses") {
+            val studentId = FirebaseAuth.getInstance().currentUser?.uid
             MyClassesScreen(
                 onBack = { navController.popBackStack() },
                 onOpenClass = { classId -> navController.navigate("classDetail/$classId") },
-                onOpenProgress = { studentId -> navController.navigate("progress/$studentId") }
+                onOpenProgress = { classId ->
+                    if (studentId != null) {
+                        navController.navigate("progress/$studentId?classId=$classId")
+                    }
+                }
             )
         }
 
@@ -184,6 +197,49 @@ fun EducanetNav(
         // CREAR PROFESOR
         composable(route = "createProfessor") {
             CreateProfessorScreen(onBack = { navController.popBackStack() })
+        }
+
+        // EVALUACIONES
+        composable(
+            route = "evaluations/{classId}",
+            arguments = listOf(navArgument("classId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val classId = backStackEntry.arguments?.getString("classId") ?: ""
+            EvaluationListScreen(
+                classId = classId,
+                onBack = { navController.popBackStack() },
+                onOpenEvaluation = { evaluationId -> navController.navigate("evaluation/$evaluationId") },
+                onNewEvaluation = { navController.navigate("evaluationEdit?classId=$classId") },
+                onEditEvaluation = { evaluationId -> navController.navigate("evaluationEdit?classId=$classId&evaluationId=$evaluationId") }
+            )
+        }
+
+        // CREAR/EDITAR EVALUACIÓN
+        composable(
+            route = "evaluationEdit?classId={classId}&evaluationId={evaluationId}",
+            arguments = listOf(
+                navArgument("classId") { type = NavType.StringType; nullable = true },
+                navArgument("evaluationId") { type = NavType.StringType; nullable = true })
+        ) { backStackEntry ->
+            val classId = backStackEntry.arguments?.getString("classId")
+            val evaluationId = backStackEntry.arguments?.getString("evaluationId")
+            EvaluationEditScreen(
+                classId = classId,
+                evaluationId = evaluationId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // RESOLVER EVALUACIÓN
+        composable(
+            route = "evaluation/{evaluationId}",
+            arguments = listOf(navArgument("evaluationId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val evaluationId = backStackEntry.arguments?.getString("evaluationId") ?: ""
+            EvaluationScreen(
+                evaluationId = evaluationId,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

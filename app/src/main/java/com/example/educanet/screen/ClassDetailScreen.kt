@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Grade
@@ -70,7 +71,8 @@ fun ClassDetailScreen(
     classId: String,
     onBack: () -> Unit,
     onEdit: (String) -> Unit,
-    onOpenProgress: (String) -> Unit, // <--- para ver el progreso de un alumno
+    onOpenProgress: (studentId: String, classId: String) -> Unit,
+    onOpenEvaluations: (String) -> Unit,
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val db = remember { FirebaseFirestore.getInstance() }
@@ -210,7 +212,6 @@ fun ClassDetailScreen(
         db.collection("progress").document(docId).set(data, SetOptions.merge())
     }
 
-    // ++++++++++ FUNCIÓN AÑADIDA PARA CORREGIR EL ERROR ++++++++++
     fun deleteGrade(grade: GradeItem) {
         if (grade.id.isBlank()) {
             scope.launch { snack.showSnackbar("Error: ID de calificación inválido.") }
@@ -219,13 +220,11 @@ fun ClassDetailScreen(
 
         scope.launch {
             try {
-                // Eliminar el documento de la calificación
                 db.collection("classes").document(classId)
                     .collection("grades").document(grade.id)
                     .delete()
                     .await()
 
-                // Recalcular el progreso del estudiante después de borrar
                 recomputeProgressFor(grade.studentId)
 
                 snack.showSnackbar("Calificación borrada exitosamente.")
@@ -234,7 +233,6 @@ fun ClassDetailScreen(
             }
         }
     }
-    // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
     Scaffold(
         topBar = {
@@ -384,8 +382,16 @@ fun ClassDetailScreen(
                     }) {
                         Text("Guardar profesor")
                     }
-                    Divider()
+                    Divider(modifier = Modifier.padding(vertical = 12.dp))
                 }
+                
+                Button(onClick = { onOpenEvaluations(classId) }) {
+                    Text("Evaluaciones")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(Icons.Default.Assignment, contentDescription = "Evaluaciones")
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 12.dp))
 
                 if (isStudent) {
                     val mine = visibleGrades
@@ -436,7 +442,7 @@ fun ClassDetailScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(studentName, style = MaterialTheme.typography.bodyLarge)
-                                        OutlinedButton(onClick = { onOpenProgress(studentId) }) {
+                                        OutlinedButton(onClick = { onOpenProgress(studentId, classId) }) {
                                             Text("Ver/Editar Progreso")
                                             Spacer(Modifier.width(4.dp))
                                             Icon(Icons.Default.TrendingUp, contentDescription = "Progreso")

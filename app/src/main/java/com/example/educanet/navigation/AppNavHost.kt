@@ -17,10 +17,7 @@ fun AppNavHost() {
         startDestination = "home"      // si quieres partir en login puedes cambiar a "login"
     ) {
         // HOME
-        // AppNavHost.kt
-
         composable("home") {
-            // Inside composable("home") { ... }
             HomeScreen(
                 onLogout = {
                     // ...
@@ -62,19 +59,25 @@ fun AppNavHost() {
                 classId = classId,
                 onBack = { navController.popBackStack() },
                 onEdit = { id -> navController.navigate("classEdit/$id") },
-                onOpenProgress = { studentId -> navController.navigate("progress/$studentId") }
+                onOpenEvaluations = { classIdValue -> navController.navigate("evaluationList/$classIdValue") },
+                onOpenProgress = { studentId, classIdValue -> navController.navigate("progress/$studentId?classId=$classIdValue") }
             )
         }
 
         // PROGRESO
         composable(
-            route = "progress/{studentId}",
-            arguments = listOf(navArgument("studentId") { type = NavType.StringType })
+            route = "progress/{studentId}?classId={classId}",
+            arguments = listOf(
+                navArgument("studentId") { type = NavType.StringType },
+                navArgument("classId") { type = NavType.StringType; nullable = true }
+            )
         ) { backStackEntry ->
             val studentId = backStackEntry.arguments?.getString("studentId")
+            val classId = backStackEntry.arguments?.getString("classId")
             ProgressScreen(
                 onBack = { navController.popBackStack() },
-                studentId = studentId
+                studentId = studentId,
+                classId = classId
             )
         }
 
