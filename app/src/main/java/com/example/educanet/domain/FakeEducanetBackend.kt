@@ -31,6 +31,7 @@ data class ClassItem(
     val id: String,
     val title: String,
     val description: String,
+    val price: Double,
     val videoLink: String?,
     val imageUrl: String?,
     val professorEmail: String?,
@@ -47,24 +48,16 @@ data class Grade(
 // Fake "backend" de Educanet
 // ==========================
 
-/**
- * Esta clase simula la lógica de Educanet para poder
- * probar con JUnit SIN Firebase ni emulador.
- *
- * En el informe puedes decir:
- * "Se utilizó una implementación simulada (FakeEducanetBackend)
- * para ejecutar pruebas unitarias sobre las funcionalidades
- * definidas en el plan de pruebas".
- */
 class FakeEducanetBackend {
 
     val users = mutableListOf<User>()
     val resources = mutableListOf<Resource>()
     val classes = mutableListOf<ClassItem>()
     val grades = mutableListOf<Grade>()
+    val cart = mutableListOf<ClassItem>()
 
     // ---------------------------------
-    // MTC_010 / MTC_390: Registro
+    // Registro y Login
     // ---------------------------------
     fun registerUser(user: User): Boolean {
         if (users.any { it.email == user.email }) return false
@@ -72,13 +65,7 @@ class FakeEducanetBackend {
         return true
     }
 
-    // ---------------------------------
-    // MTC_020: Login
-    // ---------------------------------
     fun login(email: String, password: String): User? {
-        // Para las pruebas de lógica NO validamos password,
-        // solo simulamos que FirebaseAuth ya autenticó y
-        // aquí resolvemos el usuario en Firestore.
         return users.find { it.email == email }
     }
 
@@ -87,56 +74,7 @@ class FakeEducanetBackend {
     }
 
     // ---------------------------------
-    // MTC_030: Recuperación de contraseña (NO implementado)
-    // ---------------------------------
-    fun isPasswordRecoveryAvailable(): Boolean = false
-
-    // ---------------------------------
-    // MTC_040: Edición de perfil (solo avatar local)
-    // ---------------------------------
-    fun canEditProfileNameOrEmail(): Boolean = false
-
-    // ---------------------------------
-    // MTC_050: Listado de recursos
-    // ---------------------------------
-    fun getResourcesOrderedDesc(): List<Resource> =
-        resources.sortedByDescending { it.createdAt }
-
-    // ---------------------------------
-    // MTC_060 / MTC_400: creación recursos por profesor
-    // ---------------------------------
-    fun professorCanUploadResource(): Boolean = true
-
-    // ---------------------------------
-    // MTC_070: reproducción de video (externo)
-    // ---------------------------------
-    fun openVideoInExternalBrowser(url: String): Boolean {
-        // Simula Intent.ACTION_VIEW
-        return url.startsWith("http://") || url.startsWith("https://")
-    }
-
-    // ---------------------------------
-    // MTC_080: descarga / offline
-    // ---------------------------------
-    fun hasOfflineSupport(): Boolean = false
-
-    // ---------------------------------
-    // MTC_090: aula virtual / videollamadas
-    // ---------------------------------
-    fun hasVirtualClassroom(): Boolean = false
-
-    // ---------------------------------
-    // MTC_100: notificaciones push
-    // ---------------------------------
-    fun notificationsWork(): Boolean = true
-
-    // ---------------------------------
-    // MTC_110: mensajería / comentarios
-    // ---------------------------------
-    fun messagingWorks(): Boolean = true
-
-    // ---------------------------------
-    // MTC_120: calificaciones y promedios
+    // Calificaciones y Progreso
     // ---------------------------------
     fun getGradesForStudent(email: String): List<Grade> =
         grades.filter { it.studentEmail == email }
@@ -144,68 +82,82 @@ class FakeEducanetBackend {
     fun calculateAverageForStudent(email: String): Int? {
         val list = getGradesForStudent(email)
         if (list.isEmpty()) return null
-        val sum = list.sumOf { it.value }
-        return sum / list.size
+        return list.sumOf { it.value } / list.size
     }
 
-    fun isApproved(average: Int?): Boolean =
-        average != null && average >= 70
+    fun isApproved(average: Int?): Boolean = average != null && average >= 70
 
     // ---------------------------------
-    // Módulos NO implementados (MTC 130, 140, 150, 160, 170, 180, 190)
+    // Carrito y Pagos (MTC_170)
     // ---------------------------------
-    fun isHomeworkModuleAvailable(): Boolean = false          // MTC_130
-    fun isContentProviderAvailable(): Boolean = false         // MTC_140
-    fun isCalendarIntegrationAvailable(): Boolean = false     // MTC_150
-    fun isNotificationConfigAvailable(): Boolean = false      // MTC_160
-    fun isPaymentModuleAvailable(): Boolean = false           // MTC_170
-    fun isAdsModuleAvailable(): Boolean = false               // MTC_180
-    fun isLogoutAvailable(): Boolean = false                  // MTC_190
+    fun isPaymentModuleAvailable(): Boolean = true
+
+    fun addToCart(classItem: ClassItem, user: User): Boolean {
+        if (user.role != Role.ESTUDIANTE) return false
+        if (cart.any { it.id == classItem.id }) return false
+        if (classes.find { it.id == classItem.id }?.assignedStudents?.contains(user.email) == true) return false
+        cart.add(classItem)
+        return true
+    }
+
+    fun getCartTotal(): Double = cart.sumOf { it.price }
+
+    fun checkout(user: User): Boolean {
+        if (user.role != Role.ESTUDIANTE || cart.isEmpty()) return false
+        cart.forEach { classInCart ->
+            val index = classes.indexOfFirst { it.id == classInCart.id }
+            if (index != -1) {
+                val originalClass = classes[index]
+                val updatedClass = originalClass.copy(assignedStudents = originalClass.assignedStudents + user.email)
+                classes[index] = updatedClass
+            }
+        }
+        cart.clear()
+        return true
+    }
+    
+    // ---------------------------------
+    // Funcionalidades de Administrador
+    // ---------------------------------
+    fun getStudents(): List<User> = users.filter { it.role == Role.ESTUDIANTE }
+
+    fun adminCanSeeStudentProgress(adminEmail: String): Boolean {
+        return users.any { it.email == adminEmail && it.role == Role.ADMIN }
+    }
+
+    fun adminCanUploadResourcesToClass(): Boolean {
+        return classes.any { it.resources.isNotEmpty() }
+    }
+
+    fun deleteUser(userEmail: String, adminEmail: String): Boolean {
+        val admin = users.find { it.email == adminEmail }
+        if (admin?.role != Role.ADMIN) return false
+        return users.removeIf { it.email == userEmail }
+    }
 
     // ---------------------------------
-    // MTC_390 / 440: apoderado y progreso
+    // Otras funcionalidades (disponibilidad)
     // ---------------------------------
+    fun getResourcesOrderedDesc(): List<Resource> = resources.sortedByDescending { it.createdAt }
+    fun isPasswordRecoveryAvailable(): Boolean = false
+    fun canEditProfileNameOrEmail(): Boolean = false
+    fun professorCanUploadResource(): Boolean = true
+    fun openVideoInExternalBrowser(url: String): Boolean = url.startsWith("http")
+    fun hasOfflineSupport(): Boolean = false
+    fun hasVirtualClassroom(): Boolean = false
+    fun notificationsWork(): Boolean = true
+    fun messagingWorks(): Boolean = true
+    fun isHomeworkModuleAvailable(): Boolean = false
+    fun isContentProviderAvailable(): Boolean = false
+    fun isCalendarIntegrationAvailable(): Boolean = false
+    fun isNotificationConfigAvailable(): Boolean = false
+    fun isAdsModuleAvailable(): Boolean = false
+    fun isLogoutAvailable(): Boolean = true
     fun parentCanSeeLinkedStudentProgress(parentEmail: String): Boolean {
         val parent = users.find { it.email == parentEmail && it.role == Role.APODERADO }
         return parent?.linkedStudentEmail != null
     }
-
-    // ---------------------------------
-    // MTC_410: clases con imágenes
-    // ---------------------------------
-    fun classesHaveImages(): Boolean =
-        classes.any { it.imageUrl != null }
-
-    // ---------------------------------
-    // MTC_420: creación clases profesor
-    // ---------------------------------
+    fun classesHaveImages(): Boolean = classes.any { it.imageUrl != null }
     fun professorCanCreateClass(): Boolean = true
-
-    // ---------------------------------
-    // MTC_430: creación clases admin con asignaciones
-    // ---------------------------------
-    fun adminCanCreateClassWithAssignments(): Boolean =
-        classes.any { it.professorEmail != null && it.assignedStudents.isNotEmpty() }
-
-    // ---------------------------------
-    // NEW: Admin can see student progress
-    // ---------------------------------
-    fun adminCanSeeStudentProgress(adminEmail: String): Boolean {
-        val admin = users.find { it.email == adminEmail && it.role == Role.ADMIN }
-        return admin != null
-    }
-
-    // ---------------------------------
-    // NEW: Admin can get student list
-    // ---------------------------------
-    fun getStudents(): List<User> {
-        return users.filter { it.role == Role.ESTUDIANTE }
-    }
-
-    // ---------------------------------
-    // NEW: Admin can upload resources to a class
-    // ---------------------------------
-    fun adminCanUploadResourcesToClass(): Boolean {
-        return classes.any { it.resources.isNotEmpty() }
-    }
+    fun adminCanCreateClassWithAssignments(): Boolean = classes.any { it.professorEmail != null && it.assignedStudents.isNotEmpty() }
 }

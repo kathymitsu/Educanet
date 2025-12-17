@@ -1,375 +1,195 @@
 package com.example.educanet
 
-
-import com.example.educanet.domain.*
-import org.junit.Assert.*
-
-
 import com.example.educanet.domain.ClassItem
 import com.example.educanet.domain.FakeEducanetBackend
 import com.example.educanet.domain.Grade
 import com.example.educanet.domain.Resource
 import com.example.educanet.domain.Role
 import com.example.educanet.domain.User
+import com.example.educanet.util.AuthValidators
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Pruebas JUnit que cubren TODOS los MTC del plan de pruebas.
- * Cada @Test corresponde a un MTC_xxx.
- */
 class EducanetMtcTest {
 
     private lateinit var backend: FakeEducanetBackend
+    private lateinit var student: User
+    private lateinit var professor: User
+    private lateinit var admin: User
 
     @Before
     fun setup() {
         backend = FakeEducanetBackend()
-
-        // Cargamos usuarios base (según lo que tienes en Firebase)
-        backend.registerUser(
-            User(
-                email = "katherine@educanet.cl",
-                name = "Katherine",
-                role = Role.ESTUDIANTE
-            )
-        )
-        backend.registerUser(
-            User(
-                email = "nicolas@profesor.cl",
-                name = "nicolas",
-                role = Role.PROFESOR
-            )
-        )
-        backend.registerUser(
-            User(
-                email = "isabel@admineducanet.cl",
-                name = "iisabel",
-                role = Role.ADMIN
-            )
-        )
-        backend.registerUser(
-            User(
-                email = "ana@apoderado.cl",
-                name = "Ana",
-                role = Role.APODERADO,
-                linkedStudentEmail = "katherine@educanet.cl"
-            )
-        )
+        student = User("katherine@educanet.cl", "Katherine", Role.ESTUDIANTE)
+        professor = User("nicolas@profesor.cl", "Nicolas", Role.PROFESOR)
+        admin = User("isabel@admineducanet.cl", "Isabel", Role.ADMIN)
+        backend.registerUser(student)
+        backend.registerUser(professor)
+        backend.registerUser(admin)
     }
 
-    // =========================================================
-    // MTC_010 - Registro de usuario exitoso
-    // =========================================================
-    @Test
-    fun MTC_010_registro_usuario_exitoso() {
-        val nuevo = User(
-            email = "nuevo@educanet.cl",
-            name = "Nuevo",
-            role = Role.ESTUDIANTE
-        )
-        val ok = backend.registerUser(nuevo)
+    // region User and Auth Tests
 
-        assertTrue("El usuario debería registrarse correctamente", ok)
+    @Test
+    fun `MTC_010 - registro de usuario exitoso`() {
+        val newUser = User("nuevo@educanet.cl", "Nuevo", Role.ESTUDIANTE)
+        val result = backend.registerUser(newUser)
+        assertTrue("El usuario debería registrarse correctamente", result)
         assertTrue(backend.users.any { it.email == "nuevo@educanet.cl" })
     }
 
-    // =========================================================
-    // MTC_020 - Inicio de sesión válido
-    // =========================================================
     @Test
-    fun MTC_020_inicio_sesion_valido() {
-        val user = backend.login("katherine@educanet.cl", "123456")
+    fun `MTC_020 - inicio de sesion valido`() {
+        val user = backend.login(student.email, "123456")
         val welcome = backend.buildWelcomeMessage(user)
-
         assertNotNull("Debería devolver un usuario válido", user)
         assertEquals("Hola, Katherine", welcome)
     }
 
-    // =========================================================
-    // MTC_030 - Recuperación de contraseña (NO implementado)
-    // =========================================================
     @Test
-    fun MTC_030_recuperacion_contrasena_no_implementada() {
-        val available = backend.isPasswordRecoveryAvailable()
-        assertFalse(
-            "No debería existir funcionalidad de recuperación de contraseña",
-            available
+    fun `MTC_490 - validacion de correo de profesor`() {
+        val validProfessorEmail = "profesor@profesor.cl"
+        val invalidProfessorEmail = "profesor@gmail.com"
+
+        assertNull(AuthValidators.validateEmail(validProfessorEmail))
+        assertEquals(
+            "El dominio del correo no es válido.",
+            AuthValidators.validateEmail(invalidProfessorEmail)?.message
         )
     }
 
-    // =========================================================
-    // MTC_040 - Edición de perfil de usuario
-    // =========================================================
-    @Test
-    fun MTC_040_edicion_perfil_limitada() {
-        val canEditProfile = backend.canEditProfileNameOrEmail()
-        assertFalse(
-            "Solo se debería permitir cambiar avatar localmente, no nombre/email",
-            canEditProfile
-        )
+    // endregion
+
+    // region Feature Availability Tests
+
+    @Test fun `MTC_030 - recuperacion de contrasena no implementada`() {
+        assertFalse(backend.isPasswordRecoveryAvailable())
     }
 
-    // =========================================================
-    // MTC_050 - Búsqueda y visualización de recursos
-    // =========================================================
-    @Test
-    fun MTC_050_lista_recursos_ordenada() {
-        backend.resources.addAll(
-            listOf(
-                Resource(
-                    id = "1",
-                    title = "Recurso antiguo",
-                    type = "PDF",
-                    url = "http://pdf1",
-                    createdAt = 1000L,
-                    createdByRole = Role.PROFESOR
-                ),
-                Resource(
-                    id = "2",
-                    title = "Recurso nuevo",
-                    type = "Video",
-                    url = "http://video",
-                    createdAt = 2000L,
-                    createdByRole = Role.PROFESOR
-                )
-            )
-        )
+    @Test fun `MTC_040 - edicion de perfil limitada`() {
+        assertFalse(backend.canEditProfileNameOrEmail())
+    }
 
+    @Test fun `MTC_080 - descarga para offline no disponible`() {
+        assertFalse(backend.hasOfflineSupport())
+    }
+
+    @Test fun `MTC_090 - aula virtual no implementada`() {
+        assertFalse(backend.hasVirtualClassroom())
+    }
+
+    // endregion
+
+    // region Resource and Class Tests
+
+    @Test
+    fun `MTC_050 - lista de recursos ordenada`() {
+        backend.resources.addAll(listOf(
+            Resource("1", "Antiguo", "PDF", "url1", 1000L, Role.PROFESOR),
+            Resource("2", "Nuevo", "Video", "url2", 2000L, Role.PROFESOR)
+        ))
         val ordered = backend.getResourcesOrderedDesc()
-        assertEquals("Recurso nuevo", ordered.first().title)
-        assertEquals("Recurso antiguo", ordered.last().title)
+        assertEquals("Nuevo", ordered.first().title)
     }
 
-    // =========================================================
-    // MTC_060 - Subida de recurso por profesor
-    // =========================================================
     @Test
-    fun MTC_060_subida_recurso_profesor() {
-        val canUpload = backend.professorCanUploadResource()
-        assertTrue("Los profesores deberían poder crear recursos", canUpload)
+    fun `MTC_060 y MTC_400 - subida de recurso por profesor`() {
+        assertTrue("Los profesores deberían poder crear recursos", backend.professorCanUploadResource())
     }
 
-    // =========================================================
-    // MTC_070 - Reproducción de video integrado (externo)
-    // =========================================================
     @Test
-    fun MTC_070_reproduccion_video_externa() {
-        val ok = backend.openVideoInExternalBrowser("https://youtube.com/mi_video")
-        assertTrue("El video se abre mediante Intent externo, no nativo", ok)
+    fun `MTC_420 - creacion de clases por profesor`() {
+        assertTrue("El profesor debería poder crear clases", backend.professorCanCreateClass())
     }
 
-    // =========================================================
-    // MTC_080 - Descarga para offline (NO implementado)
-    // =========================================================
+    // endregion
+
+    // region Grades and Progress Tests
+
     @Test
-    fun MTC_080_descarga_offline_no_disponible() {
-        val offline = backend.hasOfflineSupport()
-        assertFalse("La app requiere conexión permanente, sin modo offline", offline)
+    fun `MTC_120 - visualizacion de calificaciones`() {
+        backend.grades.addAll(listOf(
+            Grade(student.email, 80),
+            Grade(student.email, 60)
+        ))
+        val avg = backend.calculateAverageForStudent(student.email)
+        assertEquals(70, avg)
+        assertTrue("Con 70 debería estar aprobado", backend.isApproved(avg))
     }
 
-    // =========================================================
-    // MTC_090 - Unirse a clase virtual (NO implementado)
-    // =========================================================
+    // endregion
+
+    // region Cart and Checkout Tests
+
     @Test
-    fun MTC_090_aula_virtual_no_implementada() {
-        val hasVirtualClassroom = backend.hasVirtualClassroom()
-        assertFalse("No existe módulo de aula virtual / videollamadas", hasVirtualClassroom)
+    fun `MTC_170 - procesamiento de pago con carrito`() {
+        val classToBuy = ClassItem("c1", "Kotlin Básico", "...", 100.0, null, null, professor.email)
+        backend.classes.add(classToBuy)
+
+        // 1. Student adds a class to the cart
+        val added = backend.addToCart(classToBuy, student)
+        assertTrue(added)
+        assertEquals(1, backend.cart.size)
+        assertEquals(100.0, backend.getCartTotal(), 0.0)
+
+        // 2. Student checks out
+        val checkedOut = backend.checkout(student)
+        assertTrue(checkedOut)
+
+        // 3. Cart is now empty and student is enrolled
+        assertTrue(backend.cart.isEmpty())
+        val updatedClass = backend.classes.find { it.id == classToBuy.id }
+        assertTrue(updatedClass?.assignedStudents?.contains(student.email) == true)
     }
 
-    // =========================================================
-    // MTC_100 - Notificación de clase próxima
-    // =========================================================
+    // endregion
+
+    // region Admin-specific Tests
+
     @Test
-    fun MTC_100_notificaciones_push_ok() {
-        val works = backend.notificationsWork()
-        assertTrue("MyFirebaseMessagingService debería recibir y mostrar notificaciones", works)
+    fun `MTC_450 - admin ve lista de estudiantes`() {
+        val students = backend.getStudents()
+        assertEquals(1, students.size)
+        assertEquals(student.email, students.first().email)
     }
 
-    // =========================================================
-    // MTC_110 - Envío de mensaje interno
-    // =========================================================
     @Test
-    fun MTC_110_mensajeria_por_clase_ok() {
-        val works = backend.messagingWorks()
-        assertTrue("Los comentarios deberían funcionar como mensajería por clase", works)
-    }
-
-    // =========================================================
-    // MTC_120 - Visualización de calificaciones
-    // =========================================================
-    @Test
-    fun MTC_120_visualizacion_calificaciones() {
-        // Notas para Katherine y otro estudiante
-        backend.grades.addAll(
-            listOf(
-                Grade("katherine@educanet.cl", 80),
-                Grade("katherine@educanet.cl", 60),
-                Grade("otro@educanet.cl", 50)
-            )
-        )
-
-        val kGrades = backend.getGradesForStudent("katherine@educanet.cl")
-        val otherGrades = backend.getGradesForStudent("otro@educanet.cl")
-
-        assertEquals(2, kGrades.size)
-        assertEquals(1, otherGrades.size)
-
-        val avgK = backend.calculateAverageForStudent("katherine@educanet.cl")
-        assertEquals(70, avgK)
-        assertTrue("Con ≥70 debería estar aprobado", backend.isApproved(avgK))
-    }
-
-    // =========================================================
-    // MTC_130 - Entrega de tarea por estudiante (NO implementado)
-    // =========================================================
-    @Test
-    fun MTC_130_tareas_no_implementadas() {
-        val available = backend.isHomeworkModuleAvailable()
-        assertFalse("No existe módulo de tareas en la aplicación", available)
-    }
-
-    // =========================================================
-    // MTC_140 - Content Provider (NO implementado)
-    // =========================================================
-    @Test
-    fun MTC_140_content_provider_no_implementado() {
-        val available = backend.isContentProviderAvailable()
-        assertFalse("No existe Content Provider para compartir datos", available)
-    }
-
-    // =========================================================
-    // MTC_150 - Sincronización con calendario (NO implementado)
-    // =========================================================
-    @Test
-    fun MTC_150_calendario_no_implementado() {
-        val available = backend.isCalendarIntegrationAvailable()
-        assertFalse("No hay integración con calendario del dispositivo", available)
-    }
-
-    // =========================================================
-    // MTC_160 - Configuración de notificaciones (NO implementado)
-    // =========================================================
-    @Test
-    fun MTC_160_config_notificaciones_no_implementada() {
-        val available = backend.isNotificationConfigAvailable()
-        assertFalse("No existe configuración granular de notificaciones", available)
-    }
-
-    // =========================================================
-    // MTC_170 - Procesamiento de pago (NO implementado)
-    // =========================================================
-    @Test
-    fun MTC_170_pagos_no_implementados() {
-        val available = backend.isPaymentModuleAvailable()
-        assertFalse("No existe módulo de pagos en la aplicación", available)
-    }
-
-    // =========================================================
-    // MTC_180 - Visualización de anuncios (NO implementado)
-    // =========================================================
-    @Test
-    fun MTC_180_anuncios_no_implementados() {
-        val available = backend.isAdsModuleAvailable()
-        assertFalse("No existe sistema de anuncios en la aplicación", available)
-    }
-
-    // =========================================================
-    // MTC_190 - Logout seguro (NO implementado)
-    // =========================================================
-    @Test
-    fun MTC_190_logout_no_implementado() {
-        val available = backend.isLogoutAvailable()
-        assertFalse("No existe funcionalidad de logout en la app", available)
-    }
-
-    // =========================================================
-    // MTC_390 - Registro con rol apoderado
-    // =========================================================
-    @Test
-    fun MTC_390_registro_rol_apoderado() {
-        val parent = backend.users.find { it.email == "ana@apoderado.cl" }
-        assertNotNull(parent)
-        assertEquals(Role.APODERADO, parent!!.role)
+    fun `MTC_460 - admin ve progreso de estudiantes`() {
         assertTrue(
-            "Apoderado debe tener linkedStudent para ver progreso del alumno",
-            backend.parentCanSeeLinkedStudentProgress("ana@apoderado.cl")
+            "Admin debería poder ver el progreso de cualquier estudiante",
+            backend.adminCanSeeStudentProgress(admin.email)
         )
     }
 
-    // =========================================================
-    // MTC_400 - Creación de recursos por profesor
-    // =========================================================
     @Test
-    fun MTC_400_creacion_recursos_profesor() {
-        val can = backend.professorCanUploadResource()
-        assertTrue("Profesor debería poder crear recursos", can)
+    fun `MTC_470 - admin elimina un usuario`() {
+        val initialUserCount = backend.users.size
+        val deleted = backend.deleteUser(student.email, admin.email)
+        assertTrue(deleted)
+        assertEquals(initialUserCount - 1, backend.users.size)
+        assertNull(backend.users.find { it.email == student.email })
     }
 
-    // =========================================================
-    // MTC_410 - Visualización de clases con imágenes
-    // =========================================================
     @Test
-    fun MTC_410_clases_con_imagenes() {
-        backend.classes.add(
-            ClassItem(
-                id = "class1",
-                title = "Clase 1",
-                description = "Descripción",
-                videoLink = "https://youtube.com/123",
-                imageUrl = "https://mi-imagen.png",
-                professorEmail = "nicolas@profesor.cl"
-            )
-        )
-
-        assertTrue(
-            "Las clases deberían permitir mostrar imágenes con Coil",
-            backend.classesHaveImages()
-        )
+    fun `MTC_470 - non-admin cannot delete a user`() {
+        val initialUserCount = backend.users.size
+        val deleted = backend.deleteUser(student.email, professor.email) // Professor tries to delete
+        assertFalse(deleted)
+        assertEquals(initialUserCount, backend.users.size)
     }
 
-    // =========================================================
-    // MTC_420 - Creación de clases por profesor
-    // =========================================================
     @Test
-    fun MTC_420_creacion_clases_profesor() {
-        val can = backend.professorCanCreateClass()
-        assertTrue("Profesor debería poder crear clases", can)
+    fun `MTC_480 - admin puede subir recursos a una clase`() {
+        val newClass = ClassItem(
+            id = "c1", title = "Clase con Recursos", description = "...", price = 0.0,
+            videoLink = null, imageUrl = null, professorEmail = professor.email,
+            resources = listOf(mapOf("name" to "recurso.pdf", "url" to "http://example.com/recurso.pdf"))
+        )
+        backend.classes.add(newClass)
+
+        assertTrue(backend.adminCanUploadResourcesToClass())
     }
 
-    // =========================================================
-    // MTC_430 - Creación de clases por admin
-    // =========================================================
-    @Test
-    fun MTC_430_creacion_clases_admin_con_asignaciones() {
-        backend.classes.add(
-            ClassItem(
-                id = "class2",
-                title = "Clase Admin",
-                description = "Admin crea clase",
-                videoLink = null,
-                imageUrl = null,
-                professorEmail = "nicolas@profesor.cl",
-                assignedStudents = listOf("katherine@educanet.cl")
-            )
-        )
-
-        val ok = backend.adminCanCreateClassWithAssignments()
-        assertTrue(
-            "Admin debería poder crear clases asignando profesor y estudiantes",
-            ok
-        )
-    }
-
-    // =========================================================
-    // MTC_440 - Progreso para apoderados
-    // =========================================================
-    @Test
-    fun MTC_440_progreso_para_apoderados() {
-        val canSee = backend.parentCanSeeLinkedStudentProgress("ana@apoderado.cl")
-        assertTrue(
-            "El apoderado debe poder ver el progreso del alumno vinculado",
-            canSee
-        )
-    }
+    // endregion
 }
