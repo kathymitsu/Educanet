@@ -1,5 +1,7 @@
 package com.example.educanet.screen
 
+import android.Manifest
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,11 +62,14 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.ui.platform.LocalContext
 import com.example.educanet.data.UserPrefs
 import com.example.educanet.item.ClassItem
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import com.google.firebase.Timestamp
 import java.text.NumberFormat
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun HomeScreen(
     onLogout: () -> Unit,
@@ -96,6 +101,16 @@ fun HomeScreen(
     var loading by remember { mutableStateOf(true) }
     var classes by remember { mutableStateOf(listOf<Pair<String, ClassItem>>()) }
     var errorText by remember { mutableStateOf<String?>(null) }
+
+    // Solicitar permiso de notificaciones en Android 13+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val permissionState = rememberPermissionState(permission = Manifest.permission.POST_NOTIFICATIONS)
+        LaunchedEffect(Unit) {
+            if (!permissionState.status.isGranted) {
+                permissionState.launchPermissionRequest()
+            }
+        }
+    }
 
     // 🔔 Suscripción básica a topic
     LaunchedEffect(Unit) {
