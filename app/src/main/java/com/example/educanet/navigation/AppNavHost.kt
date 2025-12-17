@@ -43,7 +43,8 @@ fun AppNavHost() {
                     // You can define the navigation for creating a professor here.
                     // For example, navigate to a "createProfessor" screen.
                     // navController.navigate("createProfessor")
-                }
+                },
+                onDeleteUser = { navController.navigate("deleteUser") }
             )
 
         }
@@ -145,6 +146,13 @@ fun AppNavHost() {
                     navController.navigate("progress/$studentId")
                 }
             )
+        }
+
+        // ELIMINAR USUARIO
+        composable("deleteUser") {
+            DeleteUserScreen {
+                navController.popBackStack()
+            }
         }
     }
 }

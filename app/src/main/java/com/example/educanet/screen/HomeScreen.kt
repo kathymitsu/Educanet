@@ -75,6 +75,7 @@ fun HomeScreen(
     onLogout: () -> Unit,
     onNewClass: () -> Unit,
     onCreateProfessor: () -> Unit, // <--- Nueva función
+    onDeleteUser: () -> Unit, // <--- Nueva función
     onOpenClass: (String) -> Unit,
     onOpenResources: () -> Unit,
     onOpenProgress: (String) -> Unit,
@@ -233,12 +234,17 @@ fun HomeScreen(
                 }
             }
 
-            // Botón para crear profesor (solo admin)
+            // Botones de administrador
             if (isAdmin) {
                 ElevatedButton(
                     onClick = onCreateProfessor,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Crear Profesor") }
+
+                ElevatedButton(
+                    onClick = onDeleteUser,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Eliminar Usuario") }
             }
 
             Row(

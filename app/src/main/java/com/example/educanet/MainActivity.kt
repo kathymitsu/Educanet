@@ -19,6 +19,7 @@ import com.example.educanet.screen.CartScreen
 import com.example.educanet.screen.ClassDetailScreen
 import com.example.educanet.screen.ClassEditScreen
 import com.example.educanet.screen.CreateProfessorScreen
+import com.example.educanet.screen.DeleteUserScreen
 import com.example.educanet.screen.EvaluationEditScreen
 import com.example.educanet.screen.EvaluationListScreen
 import com.example.educanet.screen.EvaluationScreen
@@ -90,6 +91,7 @@ fun EducanetNav(
         composable(route = "home") {
             HomeScreen(
                 onLogout = {
+                    FirebaseAuth.getInstance().signOut()
                     navController.navigate("login") { popUpTo("home") { inclusive = true } }
                 },
                 onNewClass = { navController.navigate("classEdit") },
@@ -100,8 +102,14 @@ fun EducanetNav(
                 onOpenSettings = { navController.navigate("settings") },
                 onOpenCart = { navController.navigate("cart") },
                 onOpenMyClasses = { navController.navigate("myClasses") },
-                onOpenNotifications = {}
+                onOpenNotifications = {},
+                onDeleteUser = { navController.navigate("deleteUser") }
             )
+        }
+
+        // DELETE USER
+        composable("deleteUser") {
+            DeleteUserScreen(onBack = { navController.popBackStack() })
         }
 
         // DETALLE DE CLASE
